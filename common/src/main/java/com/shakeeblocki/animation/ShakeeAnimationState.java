@@ -296,9 +296,13 @@ public final class ShakeeAnimationState {
     private void applyExpandTransform(PoseStack matrices, ShakeeConfig config, BlockPhysicsProperties physics, float t) {
         float factor;
         if (config.expandOvershoot) {
-            DampedSpring spring = new DampedSpring(physics.stiffness, 0.52F);
-            factor = 1.0F - spring.evaluate(t * 1.3F, 1.0F, -1.8F);
+            // Elastic overshoot curve: smoothly expands from 0 to peak overshoot (~1.12) at t=0.55, then settles to 1.0
+            float c1 = 1.70158F;
+            float c3 = c1 + 1.0F;
+            float inv = t - 1.0F;
+            factor = Math.clamp(1.0F + c3 * inv * inv * inv + c1 * inv * inv, 0.0F, 1.25F);
         } else {
+            // Smooth quadratic arrival
             float inv = 1.0F - t;
             factor = 1.0F - inv * inv;
         }
@@ -310,14 +314,16 @@ public final class ShakeeAnimationState {
     }
 
     private void applySquashTransform(PoseStack matrices, BlockPhysicsProperties physics, float t) {
-        DampedSpring spring = new DampedSpring(physics.stiffness * 0.9F, physics.dampingRatio);
-        float oscillation = spring.evaluate(t * 1.4F, 0.45F, 0.0F);
+        // Juicy cartoon jelly bounce upon placement:
+        // Starts at maximum impact compression, springs upwards, rebounds and settles smoothly
+        float decay = (float) Math.exp(-3.2F * t);
+        float oscillation = (float) Math.cos(t * Math.PI * 2.2F) * decay * 0.42F;
 
-        float scaleY = Math.max(0.1F, 1.0F - oscillation);
-        float scaleXZ = Math.max(0.1F, 1.0F + (oscillation * 0.5F));
+        float squash = Math.clamp(1.0F - oscillation, 0.4F, 1.4F);
+        float bulge = Math.clamp(1.0F + (oscillation * 0.55F), 0.6F, 1.4F);
 
         matrices.translate(this.pivotX, 0.0D, this.pivotZ);
-        matrices.scale(scaleXZ, scaleY, scaleXZ);
+        matrices.scale(bulge, squash, bulge);
         matrices.translate(-this.pivotX, 0.0D, -this.pivotZ);
     }
 
@@ -416,36 +422,48 @@ public final class ShakeeAnimationState {
             matrices.translate(-this.pivotX, -this.pivotY, -this.pivotZ);
         }
 
-        // Dynamic Spring-Damper Wobble rotation
+        // Dynamic Wobble rotation & physical impact recoil
         if (mode == BreakingMode.WOBBLE || mode == BreakingMode.WOBBLE_AND_SHRINK) {
             float horizontalAngle;
             float verticalAngle;
-
-            BlockPhysicsProperties physics = BlockPhysicsProperties.forBlock(this.originalState);
+            float punch = 0.0F;
 
             if (this.phase == AnimationPhase.SETTLING) {
                 float t = Math.clamp(((currentTick - this.settlingStartTick) + tickDelta)
                         / (float) Math.max(1, this.settlingDurationTicks), 0.0F, 1.0F);
-                DampedSpring returnSpring = new DampedSpring(physics.stiffness * 1.5F, 0.75F);
-                float decay = returnSpring.evaluate(t * 1.2F, 1.0F, 0.0F);
+                float decay = (1.0F - t) * (1.0F - t);
                 horizontalAngle = this.releaseStartHorizontalAngle * decay;
                 verticalAngle = this.releaseStartVerticalAngle * decay;
             } else {
                 float age = (currentTick - this.startTick) + tickDelta;
-                float freq = (physics.stiffness * 0.22F);
-                float progressBoost = (this.breakProgress * this.breakProgress);
-                float amp = (0.2F + 0.8F * progressBoost);
+                float loopTicks = Math.max(2, config.breakingLoopTicks);
+                float loopT = (age % loopTicks) / loopTicks;
 
-                float horizontalOscillation = (float) Math.sin(age * freq * config.breakingHorizontalCycles);
-                float verticalOscillation = (float) Math.cos(age * freq * config.breakingVerticalCycles * 1.08F);
+                float horizontalOscillation = (float) Math.sin(config.breakingHorizontalCycles * TWO_PI * loopT);
+                float verticalOscillation = (float) Math.sin(config.breakingVerticalCycles * TWO_PI * loopT);
 
-                horizontalAngle = config.breakingHorizontalMaxAngle * horizontalOscillation * amp;
-                verticalAngle = config.breakingVerticalMaxAngle * verticalOscillation * amp;
+                // Strong visible tilt starting from 50% up to 100%
+                float intensity = 0.5F + 0.5F * this.breakProgress;
+
+                horizontalAngle = config.breakingHorizontalMaxAngle * horizontalOscillation * intensity;
+                verticalAngle = config.breakingVerticalMaxAngle * verticalOscillation * intensity;
+
+                // Physical impact recoil: pushes slightly inward upon every strike
+                punch = (float) Math.sin(loopT * Math.PI) * (0.02F + 0.04F * this.breakProgress);
 
                 if (config.breakingRandomizeDirection) {
                     horizontalAngle *= this.horizontalSign;
                     verticalAngle *= this.verticalSign;
                 }
+            }
+
+            if (punch > 0.0005F) {
+                Direction opposite = this.face.getOpposite();
+                matrices.translate(
+                        opposite.getStepX() * punch,
+                        opposite.getStepY() * punch,
+                        opposite.getStepZ() * punch
+                );
             }
 
             applyRotation(matrices, horizontalAngle, verticalAngle);
@@ -517,15 +535,15 @@ public final class ShakeeAnimationState {
     private void computeDynamicVibrationAngles(long currentTick, float tickDelta) {
         ShakeeConfig config = ShakeeConfig.get();
         float age = (currentTick - this.startTick) + tickDelta;
-        BlockPhysicsProperties physics = BlockPhysicsProperties.forBlock(this.originalState);
-        float freq = physics.stiffness * 0.22F;
+        float loopTicks = Math.max(2, config.breakingLoopTicks);
+        float loopT = (age % loopTicks) / loopTicks;
 
-        float horizontalOscillation = (float) Math.sin(age * freq * config.breakingHorizontalCycles);
-        float verticalOscillation = (float) Math.cos(age * freq * config.breakingVerticalCycles * 1.08F);
-        float amp = (0.2F + 0.8F * (this.breakProgress * this.breakProgress));
+        float horizontalOscillation = (float) Math.sin(config.breakingHorizontalCycles * TWO_PI * loopT);
+        float verticalOscillation = (float) Math.sin(config.breakingVerticalCycles * TWO_PI * loopT);
+        float intensity = 0.5F + 0.5F * this.breakProgress;
 
-        this.releaseStartHorizontalAngle = config.breakingHorizontalMaxAngle * horizontalOscillation * amp;
-        this.releaseStartVerticalAngle = config.breakingVerticalMaxAngle * verticalOscillation * amp;
+        this.releaseStartHorizontalAngle = config.breakingHorizontalMaxAngle * horizontalOscillation * intensity;
+        this.releaseStartVerticalAngle = config.breakingVerticalMaxAngle * verticalOscillation * intensity;
 
         if (config.breakingRandomizeDirection) {
             this.releaseStartHorizontalAngle *= this.horizontalSign;
