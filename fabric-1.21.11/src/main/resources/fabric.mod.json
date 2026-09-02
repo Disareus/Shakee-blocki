@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "shakee_blocki",
+  "version": "${version}",
+  "name": "Shakee Blocki",
+  "description": "Cartoonish block shaking, rotating, and bouncing animations on mining and placement. Based on Stupid Block Animations by fnn.",
+  "authors": [
+    "Disareus",
+    "fnn (Original mod)"
+  ],
+  "contact": {
+    "homepage": "https://github.com/Disareus/shakee_blocki",
+    "sources": "https://github.com/Disareus/shakee_blocki"
+  },
+  "license": "Custom",
+  "icon": "assets/shakee_blocki/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.shakeeblocki.ShakeeBlocki"
+    ],
+    "modmenu": [
+      "com.shakeeblocki.config.ShakeeModMenu"
+    ]
+  },
+  "mixins": [
+    "shakee_blocki.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "fabric-api": "*",
+    "minecraft": ">=1.21.11",
+    "java": ">=21"
+  },
+  "suggests": {
+    "cloth-config": "*",
+    "modmenu": "*"
+  }
+}

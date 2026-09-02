@@ -1,0 +1,24 @@
+﻿# Gradle files
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Fabric Loom run directories (game logs, worlds, configs)
+run/
+**/run/
+fabric-1.21.11/build/
+fabric-26.1.2/build/
+common/build/
+
+# IDE metadata
+.idea/
+*.iml
+.vscode/
+*.ipr
+*.iws
+
+# System & temporary files
+.DS_Store
+Thumbs.db
+*.log
+*.tmp

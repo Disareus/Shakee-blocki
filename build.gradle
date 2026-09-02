@@ -1,0 +1,15 @@
+plugins {
+    id 'base'
+}
+
+allprojects {
+    group = 'com.shakeeblocki'
+    version = '1.0.0'
+}
+
+tasks.register('buildAll') {
+    group = 'build'
+    description = 'Builds all subprojects for all Minecraft versions.'
+    dependsOn subprojects.collect { it.tasks.named('build') }
+}
+
