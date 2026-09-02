@@ -2,6 +2,8 @@ package com.shakeeblocki.animation;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import com.shakeeblocki.animation.physics.BlockPhysicsProperties;
+import com.shakeeblocki.animation.physics.DampedSpring;
 import com.shakeeblocki.config.ShakeeConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -19,11 +21,11 @@ import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Encapsulates the animation state and matrix transformations for a single animated block.
- * Optimized for zero runtime allocations during rendering and tick processing.
+ * Encapsulates the animation state and physical matrix transformations for a single animated block.
+ * Powered by analytical damped spring physics, material awareness, and zero runtime allocations.
  */
 public final class ShakeeAnimationState {
-    private static final int END_HOLD_TICKS = 1;
+    private static final int RESTORING_GRACE_TICKS = 2;
     private static final double TWO_PI = Math.PI * 2.0;
 
     private final BlockPos pos;
@@ -41,15 +43,17 @@ public final class ShakeeAnimationState {
     private double pivotY = 0.5D;
     private double pivotZ = 0.5D;
 
+    private AnimationPhase phase = AnimationPhase.SIMULATING;
     private long lastRefreshTick;
-    private long breakingReleaseStartTick = -1L;
-    private int breakingReleaseDurationTicks;
+    private long settlingStartTick = -1L;
+    private int settlingDurationTicks;
+    private long restoringStartTick = -1L;
+
     private float releaseStartHorizontalAngle;
     private float releaseStartVerticalAngle;
     private float releaseStartScale = 1.0F;
     private float currentScale = 1.0F;
     private float breakProgress = 0.0F;
-    private long handoffTick = -1L;
     private boolean isDestroyed = false;
 
     public ShakeeAnimationState(
@@ -121,10 +125,19 @@ public final class ShakeeAnimationState {
         return this.velocity;
     }
 
+    public AnimationPhase phase() {
+        return this.phase;
+    }
+
     public boolean usesCustomWorldRender() {
-        return this.originalState.getRenderShape() == RenderShape.MODEL
-                && !(this.originalState.getBlock() instanceof ChestBlock)
-                && !(this.originalState.getBlock() instanceof SignBlock);
+        return shouldUseCustomWorldRender(this.originalState);
+    }
+
+    public static boolean shouldUseCustomWorldRender(BlockState state) {
+        if (state == null) return false;
+        return state.getRenderShape() == RenderShape.MODEL
+                && !(state.getBlock() instanceof ChestBlock)
+                && !(state.getBlock() instanceof SignBlock);
     }
 
     public void updateState(BlockState newState) {
@@ -140,8 +153,9 @@ public final class ShakeeAnimationState {
 
     public void refresh(long currentTick) {
         this.lastRefreshTick = currentTick;
-        this.breakingReleaseStartTick = -1L;
-        this.handoffTick = -1L;
+        this.settlingStartTick = -1L;
+        this.restoringStartTick = -1L;
+        this.phase = AnimationPhase.SIMULATING;
     }
 
     public boolean isBreakingExpired(long currentTick) {
@@ -150,18 +164,19 @@ public final class ShakeeAnimationState {
     }
 
     public void beginBreakingRelease(long currentTick) {
-        if (this.kind != AnimationKind.BREAK || this.breakingReleaseStartTick != -1L) return;
-        computeBreakingAngles(currentTick, 0.0F);
+        if (this.kind != AnimationKind.BREAK || this.phase == AnimationPhase.SETTLING) return;
+        computeDynamicVibrationAngles(currentTick, 0.0F);
         this.releaseStartScale = this.currentScale;
-        this.breakingReleaseStartTick = currentTick;
-        this.breakingReleaseDurationTicks = Math.max(1, ShakeeConfig.get().breakingReturnTicks);
+        this.settlingStartTick = currentTick;
+        this.settlingDurationTicks = Math.max(1, ShakeeConfig.get().breakingReturnTicks);
+        this.phase = AnimationPhase.SETTLING;
     }
 
     public void markDestroyed(long currentTick) {
         if (this.kind != AnimationKind.BREAK) return;
         this.isDestroyed = true;
         this.breakProgress = 1.0F;
-        computeBreakingAngles(currentTick, 0.0F);
+        computeDynamicVibrationAngles(currentTick, 0.0F);
 
         ShakeeConfig config = ShakeeConfig.get();
         if (Math.abs(this.releaseStartHorizontalAngle) < 0.1F && Math.abs(this.releaseStartVerticalAngle) < 0.1F) {
@@ -169,8 +184,9 @@ public final class ShakeeAnimationState {
             this.releaseStartVerticalAngle = config.breakingVerticalMaxAngle * 0.8F * this.verticalSign;
         }
         this.releaseStartScale = this.currentScale > 0.01F ? this.currentScale : 1.0F;
-        this.breakingReleaseStartTick = currentTick;
-        this.breakingReleaseDurationTicks = Math.max(2, config.breakingReturnTicks);
+        this.settlingStartTick = currentTick;
+        this.settlingDurationTicks = Math.max(2, config.breakingReturnTicks);
+        this.phase = AnimationPhase.SETTLING;
     }
 
     public boolean isDestroyed() {
@@ -178,35 +194,37 @@ public final class ShakeeAnimationState {
     }
 
     public boolean isBreakingReleasing() {
-        return this.breakingReleaseStartTick != -1L;
+        return this.phase == AnimationPhase.SETTLING || this.phase == AnimationPhase.RESTORING;
+    }
+
+    public boolean isSettlingFinished(long currentTick) {
+        if (this.settlingStartTick == -1L) return false;
+        return currentTick - this.settlingStartTick >= this.settlingDurationTicks;
     }
 
     public boolean isBreakingReleaseFinished(long currentTick) {
-        if (this.breakingReleaseStartTick == -1L) return false;
-        return currentTick - this.breakingReleaseStartTick >= this.breakingReleaseDurationTicks + END_HOLD_TICKS;
+        return isSettlingFinished(currentTick);
     }
 
     public boolean isAnimationFinished(long currentTick) {
         if (this.kind == AnimationKind.BREAK) return false;
-        return currentTick - this.startTick >= this.durationTicks + END_HOLD_TICKS;
+        return currentTick - this.startTick >= this.durationTicks;
     }
 
-    public void beginHandoff(long currentTick) {
-        if (this.handoffTick == -1L) {
-            this.handoffTick = currentTick + 2;
+    public void enterRestoringPhase(long currentTick) {
+        if (this.phase != AnimationPhase.RESTORING) {
+            this.phase = AnimationPhase.RESTORING;
+            this.restoringStartTick = currentTick;
         }
     }
 
-    public boolean isInHandoff() {
-        return this.handoffTick != -1L;
-    }
-
-    public boolean isHandoffFinished(long currentTick) {
-        return this.handoffTick != -1L && currentTick >= this.handoffTick;
+    public boolean isRestoringFinished(long currentTick) {
+        return this.phase == AnimationPhase.RESTORING
+                && (currentTick - this.restoringStartTick >= RESTORING_GRACE_TICKS);
     }
 
     /**
-     * Applies the active animation transformations directly to the target PoseStack.
+     * Applies dynamic physics-based matrix transformations to the target PoseStack.
      */
     public void applyLocal(PoseStack matrices, long currentTick, float tickDelta) {
         switch (this.kind) {
@@ -218,19 +236,19 @@ public final class ShakeeAnimationState {
 
     private void applyRipple(PoseStack matrices, long currentTick, float tickDelta) {
         ShakeeConfig config = ShakeeConfig.get();
-        if (!config.enableNeighborRipple) return;
-
         float t = Math.clamp(((currentTick - this.startTick) + tickDelta) / (float) this.durationTicks, 0.0F, 1.0F);
-        float decay = (1.0F - t) * (1.0F - t);
-        float bounce = (float) Math.sin(t * Math.PI * 2.0F) * 0.08F * config.neighborRippleIntensity * decay;
 
-        matrices.translate(0.0D, bounce, 0.0D);
+        BlockPhysicsProperties physics = BlockPhysicsProperties.forBlock(this.originalState);
+        DampedSpring spring = new DampedSpring(physics.stiffness * 1.3F, 0.55F);
 
-        float squashY = 1.0F + (bounce * 0.5F);
-        float squashXZ = 1.0F - (bounce * 0.25F);
-        matrices.translate(this.pivotX, this.pivotY, this.pivotZ);
-        matrices.scale(squashXZ, squashY, squashXZ);
-        matrices.translate(-this.pivotX, -this.pivotY, -this.pivotZ);
+        // Underdamped harmonic ripple compression
+        float bounce = spring.evaluate(t * 1.5F, 1.0F, 0.0F);
+        float scaleY = 1.0F - (bounce * 0.12F * config.neighborRippleIntensity);
+        float scaleXZ = 1.0F + (bounce * 0.06F * config.neighborRippleIntensity);
+
+        matrices.translate(this.pivotX, 0.0D, this.pivotZ);
+        matrices.scale(scaleXZ, scaleY, scaleXZ);
+        matrices.translate(-this.pivotX, 0.0D, -this.pivotZ);
     }
 
     private void applyPlacement(PoseStack matrices, long currentTick, float tickDelta) {
@@ -238,21 +256,19 @@ public final class ShakeeAnimationState {
         if (!config.enablePlacementAnimation) return;
 
         float t = Math.clamp(((currentTick - this.startTick) + tickDelta) / (float) this.durationTicks, 0.0F, 1.0F);
-
         PlacementMode mode = config.placementMode != null ? config.placementMode : PlacementMode.EXPAND;
         if (mode == PlacementMode.MATERIAL_BASED) {
             mode = determineMaterialPlacementMode(this.originalState);
         }
 
-        // Seamless water handling: if block is waterlogged, avoid scaling from 0 (which leaves an empty cavity in water)
-        // Instead, use TILT at 100% scale so water and block geometry blend seamlessly.
+        // Seamless water handling: if block is waterlogged, avoid scaling from 0 to preserve water geometry
         boolean isWaterlogged = this.originalState.hasProperty(BlockStateProperties.WATERLOGGED)
                 && this.originalState.getValue(BlockStateProperties.WATERLOGGED);
         if (isWaterlogged && (mode == PlacementMode.EXPAND || mode == PlacementMode.TILT_AND_EXPAND || mode == PlacementMode.SPIN)) {
             mode = PlacementMode.TILT;
         }
 
-        // Apply Velocity Bias (player momentum leans the block)
+        // Apply Player Momentum / Velocity Bias
         if (config.enableVelocityBias && this.velocity.lengthSqr() > 0.001D) {
             float decay = (1.0F - t) * (1.0F - t);
             float strength = config.velocityBiasStrength * decay * 25.0F;
@@ -262,57 +278,55 @@ public final class ShakeeAnimationState {
             matrices.translate(-this.pivotX, -this.pivotY, -this.pivotZ);
         }
 
-        // Mode specific transformation
+        BlockPhysicsProperties physics = BlockPhysicsProperties.forBlock(this.originalState);
+
         switch (mode) {
-            case EXPAND -> applyExpandTransform(matrices, config, t);
-            case SQUASH_AND_STRETCH -> applySquashTransform(matrices, t);
-            case FALL -> applyFallTransform(matrices, t);
-            case SPIN -> applySpinTransform(matrices, config, t);
-            case TILT -> applyTiltTransform(matrices, config, t);
+            case SQUASH_AND_STRETCH -> applySquashTransform(matrices, physics, t);
+            case FALL -> applyFallTransform(matrices, physics, t);
+            case SPIN -> applySpinTransform(matrices, config, physics, t);
+            case TILT -> applyTiltTransform(matrices, config, physics, t);
             case TILT_AND_EXPAND -> {
-                applyExpandTransform(matrices, config, t);
-                applyTiltTransform(matrices, config, t);
+                applyExpandTransform(matrices, config, physics, t);
+                applyTiltTransform(matrices, config, physics, t);
             }
-            default -> applyExpandTransform(matrices, config, t);
+            default -> applyExpandTransform(matrices, config, physics, t);
         }
     }
 
-    private void applyExpandTransform(PoseStack matrices, ShakeeConfig config, float t) {
-        float scale;
+    private void applyExpandTransform(PoseStack matrices, ShakeeConfig config, BlockPhysicsProperties physics, float t) {
+        float factor;
         if (config.expandOvershoot) {
-            float c1 = 1.70158F;
-            float c3 = c1 + 1.0F;
-            float inv = t - 1.0F;
-            float factor = Math.clamp(1.0F + c3 * inv * inv * inv + c1 * inv * inv, 0.0F, 1.25F);
-            scale = config.expandInitialScale + (1.0F - config.expandInitialScale) * factor;
+            DampedSpring spring = new DampedSpring(physics.stiffness, 0.52F);
+            factor = 1.0F - spring.evaluate(t * 1.3F, 1.0F, -1.8F);
         } else {
-            float factor = 1.0F - (1.0F - t) * (1.0F - t);
-            scale = config.expandInitialScale + (1.0F - config.expandInitialScale) * factor;
+            float inv = 1.0F - t;
+            factor = 1.0F - inv * inv;
         }
 
-        scale = Math.max(0.001F, scale);
+        float scale = Math.clamp(config.expandInitialScale + (1.0F - config.expandInitialScale) * factor, 0.001F, 1.25F);
         matrices.translate(this.pivotX, this.pivotY, this.pivotZ);
         matrices.scale(scale, scale, scale);
         matrices.translate(-this.pivotX, -this.pivotY, -this.pivotZ);
     }
 
-    private void applySquashTransform(PoseStack matrices, float t) {
-        float oscillation = (float) Math.sin(t * Math.PI * 2.5F);
-        float decay = 1.0F - t;
-        float squashFactor = oscillation * decay * 0.45F;
+    private void applySquashTransform(PoseStack matrices, BlockPhysicsProperties physics, float t) {
+        DampedSpring spring = new DampedSpring(physics.stiffness * 0.9F, physics.dampingRatio);
+        float oscillation = spring.evaluate(t * 1.4F, 0.45F, 0.0F);
 
-        float scaleY = Math.max(0.1F, 1.0F - squashFactor);
-        float scaleXZ = Math.max(0.1F, 1.0F + (squashFactor * 0.55F));
+        float scaleY = Math.max(0.1F, 1.0F - oscillation);
+        float scaleXZ = Math.max(0.1F, 1.0F + (oscillation * 0.5F));
 
         matrices.translate(this.pivotX, 0.0D, this.pivotZ);
         matrices.scale(scaleXZ, scaleY, scaleXZ);
         matrices.translate(-this.pivotX, 0.0D, -this.pivotZ);
     }
 
-    private void applyFallTransform(PoseStack matrices, float t) {
+    private void applyFallTransform(PoseStack matrices, BlockPhysicsProperties physics, float t) {
         float inv = 1.0F - t;
         float height = (inv * inv) * 0.65F;
-        float bounce = Math.abs((float) Math.sin(t * Math.PI * 2.0F)) * inv * 0.15F;
+
+        DampedSpring spring = new DampedSpring(physics.stiffness, 0.6F);
+        float bounce = Math.abs(spring.evaluate(t * 1.2F, 0.2F, 0.0F));
 
         matrices.translate(0.0D, height + bounce, 0.0D);
 
@@ -325,8 +339,8 @@ public final class ShakeeAnimationState {
         }
     }
 
-    private void applySpinTransform(PoseStack matrices, ShakeeConfig config, float t) {
-        applyExpandTransform(matrices, config, t);
+    private void applySpinTransform(PoseStack matrices, ShakeeConfig config, BlockPhysicsProperties physics, float t) {
+        applyExpandTransform(matrices, config, physics, t);
 
         float spinAngle = (1.0F - t) * (1.0F - t) * 360.0F * this.horizontalSign;
         matrices.translate(this.pivotX, this.pivotY, this.pivotZ);
@@ -334,10 +348,12 @@ public final class ShakeeAnimationState {
         matrices.translate(-this.pivotX, -this.pivotY, -this.pivotZ);
     }
 
-    private void applyTiltTransform(PoseStack matrices, ShakeeConfig config, float t) {
+    private void applyTiltTransform(PoseStack matrices, ShakeeConfig config, BlockPhysicsProperties physics, float t) {
+        DampedSpring spring = new DampedSpring(physics.stiffness, physics.dampingRatio);
+        float decay = spring.evaluate(t * 1.2F, 1.0F, 0.0F);
+
         float horizontalOscillation = (float) Math.sin(config.horizontalCycles * Math.PI * t);
         float verticalOscillation = (float) Math.sin(config.verticalCycles * Math.PI * t);
-        float decay = config.easing.apply(t);
 
         float horizontalAngle = config.horizontalMaxAngle * horizontalOscillation * decay;
         float verticalAngle = config.verticalMaxAngle * verticalOscillation * decay;
@@ -372,18 +388,17 @@ public final class ShakeeAnimationState {
 
         BreakingMode mode = config.breakingMode != null ? config.breakingMode : BreakingMode.WOBBLE;
 
-        // 1. Cartoon Squash & Stretch breaking animation
         if (mode == BreakingMode.SQUASH_AND_STRETCH) {
             applyCartoonSquashBreaking(matrices, config, currentTick, tickDelta);
             return;
         }
 
-        // 2. Shrink / Collapse into center transformation
+        // Shrink / Collapse into center
         if (mode == BreakingMode.SHRINK || mode == BreakingMode.WOBBLE_AND_SHRINK || this.isDestroyed) {
             float scale;
-            if (this.breakingReleaseStartTick != -1L) {
-                float t = Math.clamp(((currentTick - this.breakingReleaseStartTick) + tickDelta)
-                        / (float) Math.max(1, this.breakingReleaseDurationTicks), 0.0F, 1.0F);
+            if (this.phase == AnimationPhase.SETTLING) {
+                float t = Math.clamp(((currentTick - this.settlingStartTick) + tickDelta)
+                        / (float) Math.max(1, this.settlingDurationTicks), 0.0F, 1.0F);
                 float ease = 1.0F - (1.0F - t) * (1.0F - t);
                 scale = this.isDestroyed
                         ? this.releaseStartScale * (1.0F - ease)
@@ -401,28 +416,31 @@ public final class ShakeeAnimationState {
             matrices.translate(-this.pivotX, -this.pivotY, -this.pivotZ);
         }
 
-        // 3. Wobble rotation transformation
+        // Dynamic Spring-Damper Wobble rotation
         if (mode == BreakingMode.WOBBLE || mode == BreakingMode.WOBBLE_AND_SHRINK) {
             float horizontalAngle;
             float verticalAngle;
 
-            if (this.breakingReleaseStartTick != -1L) {
-                float t = Math.clamp(((currentTick - this.breakingReleaseStartTick) + tickDelta)
-                        / (float) Math.max(1, this.breakingReleaseDurationTicks), 0.0F, 1.0F);
-                float k = 1.0F - t;
-                horizontalAngle = this.releaseStartHorizontalAngle * k;
-                verticalAngle = this.releaseStartVerticalAngle * k;
+            BlockPhysicsProperties physics = BlockPhysicsProperties.forBlock(this.originalState);
+
+            if (this.phase == AnimationPhase.SETTLING) {
+                float t = Math.clamp(((currentTick - this.settlingStartTick) + tickDelta)
+                        / (float) Math.max(1, this.settlingDurationTicks), 0.0F, 1.0F);
+                DampedSpring returnSpring = new DampedSpring(physics.stiffness * 1.5F, 0.75F);
+                float decay = returnSpring.evaluate(t * 1.2F, 1.0F, 0.0F);
+                horizontalAngle = this.releaseStartHorizontalAngle * decay;
+                verticalAngle = this.releaseStartVerticalAngle * decay;
             } else {
                 float age = (currentTick - this.startTick) + tickDelta;
-                float loopTicks = Math.max(1, config.breakingLoopTicks);
-                float loopT = (age % loopTicks) / loopTicks;
+                float freq = (physics.stiffness * 0.22F);
+                float progressBoost = (this.breakProgress * this.breakProgress);
+                float amp = (0.2F + 0.8F * progressBoost);
 
-                float horizontalOscillation = (float) Math.sin(config.breakingHorizontalCycles * TWO_PI * loopT);
-                float verticalOscillation = (float) Math.sin(config.breakingVerticalCycles * TWO_PI * loopT);
-                float amplitude = config.breakingEasing.apply(loopT);
+                float horizontalOscillation = (float) Math.sin(age * freq * config.breakingHorizontalCycles);
+                float verticalOscillation = (float) Math.cos(age * freq * config.breakingVerticalCycles * 1.08F);
 
-                horizontalAngle = config.breakingHorizontalMaxAngle * horizontalOscillation * amplitude;
-                verticalAngle = config.breakingVerticalMaxAngle * verticalOscillation * amplitude;
+                horizontalAngle = config.breakingHorizontalMaxAngle * horizontalOscillation * amp;
+                verticalAngle = config.breakingVerticalMaxAngle * verticalOscillation * amp;
 
                 if (config.breakingRandomizeDirection) {
                     horizontalAngle *= this.horizontalSign;
@@ -434,12 +452,6 @@ public final class ShakeeAnimationState {
         }
     }
 
-    /**
-     * Cartoon Squash & Stretch breaking animation:
-     * - Mining in progress: Rhythmic squash/elastic compression with increasing tension.
-     * - Mining released: Spring rebound back to rest.
-     * - Destroyed: Anticipation squash followed by an explosive stretch and pop disappear.
-     */
     private void applyCartoonSquashBreaking(PoseStack matrices, ShakeeConfig config, long currentTick, float tickDelta) {
         float scaleY;
         float scaleXZ;
@@ -447,57 +459,40 @@ public final class ShakeeAnimationState {
         float verticalAngle = 0.0F;
 
         if (this.isDestroyed) {
-            // Cartoon Pop on destruction
-            float t = Math.clamp(((currentTick - this.breakingReleaseStartTick) + tickDelta)
-                    / (float) Math.max(1, this.breakingReleaseDurationTicks), 0.0F, 1.0F);
-
+            float t = Math.clamp(((currentTick - this.settlingStartTick) + tickDelta)
+                    / (float) Math.max(1, this.settlingDurationTicks), 0.0F, 1.0F);
             if (t < 0.25F) {
-                // Phase 1: Rapid anticipation squash
-                float p = t / 0.25F;
-                float ease = (float) Math.sin(p * Math.PI * 0.5);
-                scaleY = 1.0F - 0.45F * ease;
-                scaleXZ = 1.0F + 0.35F * ease;
-            } else if (t < 0.6F) {
-                // Phase 2: Overshoot elastic stretch & pop
-                float p = (t - 0.25F) / 0.35F;
-                float ease = (float) Math.sin(p * Math.PI);
-                scaleY = 0.55F + 0.85F * p + ease * 0.35F;
-                scaleXZ = 1.35F - 0.65F * p - ease * 0.25F;
+                float sub = t / 0.25F;
+                scaleY = 1.0F - (sub * 0.35F);
+                scaleXZ = 1.0F + (sub * 0.45F);
             } else {
-                // Phase 3: Collapse out
-                float p = (t - 0.6F) / 0.4F;
-                float ease = p * p;
-                scaleY = Math.max(0.001F, 1.4F * (1.0F - ease));
-                scaleXZ = Math.max(0.001F, 0.7F * (1.0F - ease));
+                float sub = (t - 0.25F) / 0.75F;
+                float pop = (float) Math.exp(-sub * 4.0F);
+                scaleY = (1.0F - sub) * (1.0F + sub * 2.0F) * pop;
+                scaleXZ = (1.0F - sub) * 0.7F * pop;
             }
-        } else if (this.breakingReleaseStartTick != -1L) {
-            // Spring rebound back to rest
-            float t = Math.clamp(((currentTick - this.breakingReleaseStartTick) + tickDelta)
-                    / (float) Math.max(1, this.breakingReleaseDurationTicks), 0.0F, 1.0F);
-            float decay = 1.0F - t;
-            float oscillation = (float) Math.cos(t * Math.PI * 3.0F) * decay * 0.35F;
+        } else if (this.phase == AnimationPhase.SETTLING) {
+            float t = Math.clamp(((currentTick - this.settlingStartTick) + tickDelta)
+                    / (float) Math.max(1, this.settlingDurationTicks), 0.0F, 1.0F);
+            BlockPhysicsProperties physics = BlockPhysicsProperties.forBlock(this.originalState);
+            DampedSpring spring = new DampedSpring(physics.stiffness, 0.65F);
+            float decay = spring.evaluate(t * 1.3F, 1.0F, 0.0F);
 
-            scaleY = Math.max(0.1F, 1.0F + oscillation);
-            scaleXZ = Math.max(0.1F, 1.0F - oscillation * 0.55F);
-
+            scaleY = 1.0F + (this.releaseStartScale - 1.0F) * decay;
+            scaleXZ = 1.0F - (this.releaseStartScale - 1.0F) * 0.5F * decay;
             horizontalAngle = this.releaseStartHorizontalAngle * decay;
             verticalAngle = this.releaseStartVerticalAngle * decay;
         } else {
-            // Mining impact pulse with increasing tension as progress nears 100%
+            float tension = this.breakProgress * 0.28F;
             float age = (currentTick - this.startTick) + tickDelta;
-            float loopTicks = Math.max(1, config.breakingLoopTicks);
-            float loopT = (age % loopTicks) / loopTicks;
+            float heartbeat = (float) Math.sin(age * 1.8F) * tension;
 
-            float pulse = (float) Math.sin(loopT * Math.PI * 2.0F);
-            float intensity = 0.12F + 0.28F * this.breakProgress;
-            float squashFactor = pulse * intensity;
+            scaleY = Math.clamp(1.0F - tension + heartbeat, 0.4F, 1.4F);
+            scaleXZ = Math.clamp(1.0F + (tension * 0.5F) - (heartbeat * 0.5F), 0.6F, 1.4F);
+            this.currentScale = scaleY;
 
-            scaleY = Math.max(0.1F, 1.0F - squashFactor);
-            scaleXZ = Math.max(0.1F, 1.0F + (squashFactor * 0.55F));
-
-            // Subtle cartoon jiggle tilt
-            float horizontalOscillation = (float) Math.sin(config.breakingHorizontalCycles * TWO_PI * loopT);
-            float verticalOscillation = (float) Math.sin(config.breakingVerticalCycles * TWO_PI * loopT);
+            float horizontalOscillation = (float) Math.sin(age * 1.5F);
+            float verticalOscillation = (float) Math.cos(age * 1.6F);
             float tiltIntensity = (0.3F + 0.7F * this.breakProgress) * 0.6F;
 
             horizontalAngle = config.breakingHorizontalMaxAngle * horizontalOscillation * tiltIntensity;
@@ -519,18 +514,18 @@ public final class ShakeeAnimationState {
         matrices.translate(-this.pivotX, -this.pivotY, -this.pivotZ);
     }
 
-    private void computeBreakingAngles(long currentTick, float tickDelta) {
+    private void computeDynamicVibrationAngles(long currentTick, float tickDelta) {
         ShakeeConfig config = ShakeeConfig.get();
         float age = (currentTick - this.startTick) + tickDelta;
-        float loopTicks = Math.max(1, config.breakingLoopTicks);
-        float loopT = (age % loopTicks) / loopTicks;
+        BlockPhysicsProperties physics = BlockPhysicsProperties.forBlock(this.originalState);
+        float freq = physics.stiffness * 0.22F;
 
-        float horizontalOscillation = (float) Math.sin(config.breakingHorizontalCycles * TWO_PI * loopT);
-        float verticalOscillation = (float) Math.sin(config.breakingVerticalCycles * TWO_PI * loopT);
-        float amplitude = config.breakingEasing.apply(loopT);
+        float horizontalOscillation = (float) Math.sin(age * freq * config.breakingHorizontalCycles);
+        float verticalOscillation = (float) Math.cos(age * freq * config.breakingVerticalCycles * 1.08F);
+        float amp = (0.2F + 0.8F * (this.breakProgress * this.breakProgress));
 
-        this.releaseStartHorizontalAngle = config.breakingHorizontalMaxAngle * horizontalOscillation * amplitude;
-        this.releaseStartVerticalAngle = config.breakingVerticalMaxAngle * verticalOscillation * amplitude;
+        this.releaseStartHorizontalAngle = config.breakingHorizontalMaxAngle * horizontalOscillation * amp;
+        this.releaseStartVerticalAngle = config.breakingVerticalMaxAngle * verticalOscillation * amp;
 
         if (config.breakingRandomizeDirection) {
             this.releaseStartHorizontalAngle *= this.horizontalSign;
@@ -581,7 +576,6 @@ public final class ShakeeAnimationState {
     }
 
     private record AxisPair(Axis horizontalAxis, Axis verticalAxis) {
-        // Pre-allocated static axis pairs indexed by Direction.ordinal() for zero allocation lookups
         private static final AxisPair[] BY_FACE = new AxisPair[] {
                 new AxisPair(Axis.XP, Axis.ZP), // DOWN (0)
                 new AxisPair(Axis.XN, Axis.ZP), // UP (1)

@@ -3,7 +3,7 @@
 [![Minecraft](https://img.shields.io/badge/Minecraft-1.21.11%20%7C%2026.1.2-brightgreen.svg)](https://minecraft.net/)
 [![Platform](https://img.shields.io/badge/Platform-Fabric-blue.svg)](https://fabricmc.net/)
 [![Side](https://img.shields.io/badge/Side-Client-purple.svg)](https://modrinth.com/)
-[![License](https://img.shields.io/badge/License-Custom-orange.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 A lightweight, highly optimized client-side Fabric mod that adds juicy, physics-like wobbling, tilting, expanding, and bouncing animations to Minecraft blocks whenever you place or mine them.
 
@@ -78,11 +78,11 @@ Compiled `.jar` artifacts will be located in:
 
 ---
 
-## Credits & License
+## 📜 Credits & License
 
-* **Author & Maintainer:** **Disareus**
-* **Upstream Project:** Built upon and inspired by [Stupid Block Animations](https://github.com/fenny013/stupid-block-animations) by **fenny013 (fnn)**.
-* **License:** Distributed under the terms of the project's license. See the [LICENSE](LICENSE) file for complete details.
+* **Author & Developer:** **Disareus**
+* **Inspiration:** Inspired by dynamic block animation concepts in the Minecraft modding community.
+* **License:** Licensed under the [MIT License](LICENSE). Free to use, modify, and redistribute!
 
 
 

@@ -38,7 +38,6 @@ public final class ShakeeAnimationManager {
 
     // Animation maps & primitive tracking collections
     private static final Long2ObjectOpenHashMap<ShakeeAnimationState> ACTIVE = new Long2ObjectOpenHashMap<>();
-    private static final LongSet INVISIBLE = LongSets.synchronize(new LongOpenHashSet());
     private static final Long2ObjectOpenHashMap<PendingPlacement> PENDING = new Long2ObjectOpenHashMap<>();
     private static final LongArrayList TO_REMOVE = new LongArrayList();
     private static final LongSet DIRTY_SECTIONS = new LongOpenHashSet();
@@ -89,14 +88,14 @@ public final class ShakeeAnimationManager {
                         } else {
                             state.beginBreakingRelease(clientTicks);
                         }
-                    } else if (state.isBreakingReleaseFinished(clientTicks)) {
+                    } else if (state.isSettlingFinished(clientTicks)) {
                         if (state.isDestroyed()) {
                             TO_REMOVE.add(posLong);
                         } else if (state.usesCustomWorldRender()) {
-                            if (!state.isInHandoff()) {
+                            if (state.phase() != AnimationPhase.RESTORING) {
                                 unhideStructure(world, pos, state.originalState());
-                                state.beginHandoff(clientTicks);
-                            } else if (state.isHandoffFinished(clientTicks)) {
+                                state.enterRestoringPhase(clientTicks);
+                            } else if (state.isRestoringFinished(clientTicks)) {
                                 TO_REMOVE.add(posLong);
                             }
                         } else {
@@ -109,10 +108,10 @@ public final class ShakeeAnimationManager {
 
             if (state.isAnimationFinished(clientTicks)) {
                 if (state.usesCustomWorldRender()) {
-                    if (!state.isInHandoff()) {
+                    if (state.phase() != AnimationPhase.RESTORING) {
                         unhideStructure(world, pos, state.originalState());
-                        state.beginHandoff(clientTicks);
-                    } else if (state.isHandoffFinished(clientTicks)) {
+                        state.enterRestoringPhase(clientTicks);
+                    } else if (state.isRestoringFinished(clientTicks)) {
                         TO_REMOVE.add(posLong);
                     }
                 } else {
@@ -141,11 +140,11 @@ public final class ShakeeAnimationManager {
     }
 
     public static boolean isInvisible(BlockPos pos) {
-        return pos != null && INVISIBLE.contains(pos.asLong());
+        return pos != null && ShakeeRenderSuppressor.isSuppressed(pos.asLong());
     }
 
     public static boolean isInvisible(long posLong) {
-        return INVISIBLE.contains(posLong);
+        return ShakeeRenderSuppressor.isSuppressed(posLong);
     }
 
     public static boolean isAnimatedOrInvisible(BlockPos pos) {
@@ -286,10 +285,10 @@ public final class ShakeeAnimationManager {
 
     public static void clear() {
         ACTIVE.clear();
-        INVISIBLE.clear();
         PENDING.clear();
         TO_REMOVE.clear();
         DIRTY_SECTIONS.clear();
+        ShakeeRenderSuppressor.clear();
     }
 
     public static void markPlacementAttempt(BlockPos targetPos, Block block, Direction face, Vec3 velocity) {
@@ -537,7 +536,7 @@ public final class ShakeeAnimationManager {
         for (Direction dir : DIRECTIONS) {
             BlockPos neighborPos = centerPos.relative(dir);
             long neighborLong = neighborPos.asLong();
-            if (ACTIVE.containsKey(neighborLong) || INVISIBLE.contains(neighborLong)) continue;
+            if (ACTIVE.containsKey(neighborLong) || ShakeeRenderSuppressor.isSuppressed(neighborLong)) continue;
 
             BlockState neighborState = world.getBlockState(neighborPos);
             if (neighborState.isAir() || !isBlockAllowed(neighborState) || !shouldUseCustomWorldRender(neighborState)) continue;
@@ -556,7 +555,8 @@ public final class ShakeeAnimationManager {
                     )
             );
 
-            if (INVISIBLE.add(neighborLong)) {
+            if (!ShakeeRenderSuppressor.isSuppressed(neighborLong)) {
+                ShakeeRenderSuppressor.suppress(neighborLong);
                 rerender(world, neighborPos);
             }
         }
@@ -729,7 +729,9 @@ public final class ShakeeAnimationManager {
 
     private static void hideStructure(ClientLevel world, BlockPos pos, BlockState state) {
         forEachStructurePos(world, pos, state, renderPos -> {
-            if (INVISIBLE.add(renderPos.asLong())) {
+            long pLong = renderPos.asLong();
+            if (!ShakeeRenderSuppressor.isSuppressed(pLong)) {
+                ShakeeRenderSuppressor.suppress(pLong);
                 rerender(world, renderPos);
             }
         });
@@ -737,7 +739,8 @@ public final class ShakeeAnimationManager {
 
     private static void unhideStructure(ClientLevel world, BlockPos pos, BlockState state) {
         forEachStructurePos(world, pos, state, renderPos -> {
-            if (INVISIBLE.remove(renderPos.asLong())) {
+            long pLong = renderPos.asLong();
+            if (ShakeeRenderSuppressor.release(pLong)) {
                 rerender(world, renderPos);
             }
         });

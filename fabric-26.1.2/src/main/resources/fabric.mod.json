@@ -3,16 +3,15 @@
   "id": "shakee_blocki",
   "version": "${version}",
   "name": "Shakee Blocki",
-  "description": "Cartoonish block shaking, rotating, and bouncing animations on mining and placement. Based on Stupid Block Animations by fnn.",
+  "description": "Juicy, physics-like block shaking, rotating, and bouncing animations on mining and placement.",
   "authors": [
-    "Disareus",
-    "fnn (Original mod)"
+    "Disareus"
   ],
   "contact": {
-    "homepage": "https://github.com/Disareus/shakee_blocki",
-    "sources": "https://github.com/Disareus/shakee_blocki"
+    "homepage": "https://github.com/Disareus/Shakee-blocki",
+    "sources": "https://github.com/Disareus/Shakee-blocki"
   },
-  "license": "Custom",
+  "license": "MIT",
   "icon": "assets/shakee_blocki/icon.png",
   "environment": "client",
   "entrypoints": {

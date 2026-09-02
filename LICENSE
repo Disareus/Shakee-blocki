@@ -1,26 +1,21 @@
-﻿Shakee Blocki License
+MIT License
 
 Copyright (c) 2026 Disareus
-Based on Stupid Block Animations, Copyright (c) 2026 fnn
 
-1. Permission
-You are allowed to:
-- Use this mod.
-- Include this mod in modpacks.
-- Modify the mod for personal or public use.
-- Redistribute the original or modified versions.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-2. Source Code Access for the Original Author
-If you distribute a modified version of this mod or create a derivative work,
-you are required to provide the full source code of your modifications to the original author (fnn) upon request.
-The source code does NOT have to be made publicly available, but it must be shared with the original author if requested.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-3. Attribution
-Any redistribution of the original or modified versions must include credit to the original author (fnn) and a link to the original project:
-https://github.com/fenny013/stupid-block-animations
-
-4. No Misrepresentation
-You may not claim that you are the original author of the original Stupid Block Animations project.
-
-5. No Warranty
-This software is provided as is, without warranty of any kind. The authors are not responsible for any damages arising from the use of this software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
