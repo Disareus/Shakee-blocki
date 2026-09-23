@@ -24,8 +24,12 @@ public abstract class BlockOcclusionCacheMixin {
             return;
         }
 
-        BlockPos neighbor = this.pos.relative(direction);
-        if (ShakeeAnimationManager.isAnimatedOrInvisible(neighbor)) {
+        long neighborLong = BlockPos.asLong(
+                this.pos.getX() + direction.getStepX(),
+                this.pos.getY() + direction.getStepY(),
+                this.pos.getZ() + direction.getStepZ()
+        );
+        if (ShakeeAnimationManager.isInvisible(neighborLong)) {
             cir.setReturnValue(true);
         }
     }

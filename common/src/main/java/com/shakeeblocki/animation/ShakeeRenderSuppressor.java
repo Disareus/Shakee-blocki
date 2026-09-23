@@ -1,44 +1,48 @@
 package com.shakeeblocki.animation;
 
-import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
-import it.unimi.dsi.fastutil.longs.LongSet;
-import it.unimi.dsi.fastutil.longs.LongSets;
+import it.unimi.dsi.fastutil.longs.Long2IntMap;
+import it.unimi.dsi.fastutil.longs.Long2IntMaps;
+import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import net.minecraft.core.BlockPos;
 
 /**
  * Thread-safe registry governing block render suppression.
- * Prevents duplicate or z-fighting geometry between vanilla/Sodium chunk meshing
- * and Shakee Blocki's dynamic animated render passes.
+ * Each animated state contributes one ownership count per rendered position.
  */
 public final class ShakeeRenderSuppressor {
-    private static final LongSet SUPPRESSED = LongSets.synchronize(new LongOpenHashSet());
+    private static final Long2IntMap SUPPRESSED = Long2IntMaps.synchronize(new Long2IntOpenHashMap());
 
     private ShakeeRenderSuppressor() {}
 
-    public static void suppress(long posLong) {
-        SUPPRESSED.add(posLong);
+    public static boolean suppress(long posLong) {
+        int count = SUPPRESSED.get(posLong);
+        SUPPRESSED.put(posLong, count + 1);
+        return count == 0;
     }
 
-    public static void suppress(BlockPos pos) {
-        if (pos != null) {
-            SUPPRESSED.add(pos.asLong());
-        }
+    public static boolean suppress(BlockPos pos) {
+        return pos != null && suppress(pos.asLong());
     }
 
     public static boolean release(long posLong) {
-        return SUPPRESSED.remove(posLong);
+        int count = SUPPRESSED.get(posLong);
+        if (count <= 1) {
+            return SUPPRESSED.remove(posLong) > 0;
+        }
+        SUPPRESSED.put(posLong, count - 1);
+        return false;
     }
 
     public static boolean release(BlockPos pos) {
-        return pos != null && SUPPRESSED.remove(pos.asLong());
+        return pos != null && release(pos.asLong());
     }
 
     public static boolean isSuppressed(long posLong) {
-        return SUPPRESSED.contains(posLong);
+        return SUPPRESSED.containsKey(posLong);
     }
 
     public static boolean isSuppressed(BlockPos pos) {
-        return pos != null && SUPPRESSED.contains(pos.asLong());
+        return pos != null && isSuppressed(pos.asLong());
     }
 
     public static void clear() {

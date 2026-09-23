@@ -6,7 +6,6 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
-import it.unimi.dsi.fastutil.longs.LongSets;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -16,8 +15,6 @@ import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.DoorBlock;
-import net.minecraft.world.level.block.RenderShape;
-import net.minecraft.world.level.block.SignBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.ChestType;
@@ -44,6 +41,8 @@ public final class ShakeeAnimationManager {
 
     private static long clientTicks = 0L;
     private static long lastPlacementTick = -100L;
+    private static volatile boolean activeAnimationsPresent;
+    private static ClientLevel trackedWorld;
 
     private ShakeeAnimationManager() {}
 
@@ -55,12 +54,19 @@ public final class ShakeeAnimationManager {
 
         Minecraft client = Minecraft.getInstance();
         ClientLevel world = client.level;
-        if (world == null) {
+        if (world != trackedWorld) {
             clear();
+            trackedWorld = world;
+        }
+        if (world == null) {
             return;
         }
 
-        PENDING.values().removeIf(pending -> pending.expiresAt() <= clientTicks);
+        ShakeeConfig config = ShakeeConfig.get();
+
+        if (!PENDING.isEmpty()) {
+            PENDING.values().removeIf(pending -> pending.expiresAt() <= clientTicks);
+        }
         TO_REMOVE.clear();
 
         for (Long2ObjectMap.Entry<ShakeeAnimationState> entry : ACTIVE.long2ObjectEntrySet()) {
@@ -68,12 +74,19 @@ public final class ShakeeAnimationManager {
             ShakeeAnimationState state = entry.getValue();
             BlockPos pos = state.pos();
 
+            if ((state.kind() == AnimationKind.BREAK && !config.enableBreakingAnimation)
+                    || (state.kind() != AnimationKind.BREAK && !config.enablePlacementAnimation)) {
+                TO_REMOVE.add(posLong);
+                continue;
+            }
+
             BlockState current = world.getBlockState(pos);
-            if (!current.is(state.originalState().getBlock())) {
-                if (state.kind() != AnimationKind.BREAK || (!state.isBreakingReleasing() && !current.isAir())) {
-                    TO_REMOVE.add(posLong);
-                    continue;
-                }
+            boolean destroyedBreakWithAir = state.kind() == AnimationKind.BREAK
+                    && state.isDestroyed()
+                    && current.isAir();
+            if (!destroyedBreakWithAir && !current.is(state.originalState().getBlock())) {
+                TO_REMOVE.add(posLong);
+                continue;
             }
 
             if (state.kind() == AnimationKind.BREAK) {
@@ -127,12 +140,13 @@ public final class ShakeeAnimationManager {
                 unhideStructure(world, removed.pos(), removed.originalState());
             }
         }
+        activeAnimationsPresent = !ACTIVE.isEmpty();
 
         DIRTY_SECTIONS.clear();
     }
 
     public static boolean hasActiveAnimations() {
-        return !ACTIVE.isEmpty();
+        return activeAnimationsPresent;
     }
 
     public static Collection<ShakeeAnimationState> activeAnimations() {
@@ -148,11 +162,11 @@ public final class ShakeeAnimationManager {
     }
 
     public static boolean isAnimatedOrInvisible(BlockPos pos) {
-        return isInvisible(pos);
+        return pos != null && isAnimatedOrInvisible(pos.asLong());
     }
 
-    public static ShakeeAnimationState get(BlockPos pos) {
-        return ACTIVE.get(pos.asLong());
+    public static boolean isAnimatedOrInvisible(long posLong) {
+        return ACTIVE.containsKey(posLong) || ShakeeRenderSuppressor.isSuppressed(posLong);
     }
 
     public static ShakeeAnimationState getBreaking(BlockPos pos) {
@@ -210,10 +224,18 @@ public final class ShakeeAnimationManager {
         ShakeeAnimationState existing = ACTIVE.get(posLong);
 
         if (existing != null && existing.kind() == AnimationKind.BREAK && state.is(existing.originalState().getBlock())) {
+            boolean wasRestoring = existing.phase() == AnimationPhase.RESTORING;
             existing.updateState(state);
             existing.updateBreakProgress(progress);
             existing.refresh(clientTicks);
+            if (wasRestoring && existing.usesCustomWorldRender()) {
+                hideStructure(world, pos, state);
+            }
             return;
+        }
+
+        if (existing != null) {
+            removeStateNow(world, pos);
         }
 
         ShakeeAnimationState created = new ShakeeAnimationState(
@@ -228,6 +250,7 @@ public final class ShakeeAnimationManager {
         );
         created.updateBreakProgress(progress);
         ACTIVE.put(posLong, created);
+        activeAnimationsPresent = true;
         created.refresh(clientTicks);
 
         if (shouldUseCustomWorldRender(state)) {
@@ -285,9 +308,12 @@ public final class ShakeeAnimationManager {
 
     public static void clear() {
         ACTIVE.clear();
+        activeAnimationsPresent = false;
         PENDING.clear();
         TO_REMOVE.clear();
         DIRTY_SECTIONS.clear();
+        lastPlacementTick = -100L;
+        trackedWorld = null;
         ShakeeRenderSuppressor.clear();
     }
 
@@ -301,7 +327,6 @@ public final class ShakeeAnimationManager {
         int verticalSign = random.nextBoolean() ? 1 : -1;
 
         PendingPlacement pending = new PendingPlacement(
-                targetPos.immutable(),
                 block,
                 face,
                 horizontalSign,
@@ -362,6 +387,10 @@ public final class ShakeeAnimationManager {
             int horizontalSign,
             int verticalSign
     ) {
+        if (ACTIVE.containsKey(pos.asLong())) {
+            removeStateNow(world, pos);
+        }
+
         ShakeeAnimationState created = new ShakeeAnimationState(
                 pos,
                 state,
@@ -374,11 +403,11 @@ public final class ShakeeAnimationManager {
         );
         created.markDestroyed(clientTicks);
         ACTIVE.put(pos.asLong(), created);
+        activeAnimationsPresent = true;
     }
 
     public static void onClientBlockUpdated(ClientLevel world, BlockPos pos, BlockState state) {
-        BlockPos immutablePos = pos.immutable();
-        long posLong = immutablePos.asLong();
+        long posLong = pos.asLong();
 
         // When block is destroyed (becomes Air)
         if (state.isAir()) {
@@ -396,71 +425,82 @@ public final class ShakeeAnimationManager {
         }
 
         if (state.getBlock() instanceof ChestBlock) {
-            refreshExisting(world, immutablePos, state);
+            refreshExisting(pos, state);
 
-            BlockPos otherPos = getChestOtherPos(immutablePos, state);
+            BlockPos otherPos = getChestOtherPos(pos, state);
             BlockState otherState = otherPos != null ? world.getBlockState(otherPos) : null;
 
             if (isValidChestPair(state, otherState)) {
-                refreshExisting(world, otherPos, otherState);
+                refreshExisting(otherPos, otherState);
             }
 
             PendingPlacement pendingHere = PENDING.get(posLong);
-            if (pendingHere != null && state.is(pendingHere.block())) {
-                startOrRefreshChest(world, immutablePos, state, pendingHere.face(), pendingHere.horizontalSign(), pendingHere.verticalSign(), pendingHere.velocity());
+            if (pendingHere != null) {
+                boolean placedHere = state.is(pendingHere.block());
+                if (placedHere) {
+                    startOrRefreshChest(world, pos, state, pendingHere.face(), pendingHere.horizontalSign(), pendingHere.verticalSign(), pendingHere.velocity());
+                    if (otherPos != null) PENDING.remove(otherPos.asLong());
+                }
                 PENDING.remove(posLong);
-                if (otherPos != null) PENDING.remove(otherPos.asLong());
-                return;
+                if (placedHere) return;
             }
 
             if (isValidChestPair(state, otherState)) {
                 PendingPlacement pendingOther = PENDING.get(otherPos.asLong());
-                if (pendingOther != null && otherState.is(pendingOther.block())) {
-                    startOrRefreshChest(world, immutablePos, state, pendingOther.face(), pendingOther.horizontalSign(), pendingOther.verticalSign(), pendingOther.velocity());
+                if (pendingOther != null) {
+                    if (otherState.is(pendingOther.block())) {
+                        startOrRefreshChest(world, pos, state, pendingOther.face(), pendingOther.horizontalSign(), pendingOther.verticalSign(), pendingOther.velocity());
+                    }
                     PENDING.remove(otherPos.asLong());
                     PENDING.remove(posLong);
-                    return;
+                    if (otherState.is(pendingOther.block())) return;
                 }
 
                 ShakeeAnimationState otherAnimation = ACTIVE.get(otherPos.asLong());
                 if (otherAnimation != null && otherAnimation.originalState().is(state.getBlock())) {
                     if (ACTIVE.get(posLong) == null) {
-                        startSyncedFrom(world, immutablePos, state, otherAnimation);
+                        startSyncedFrom(world, pos, state, otherAnimation);
                     } else {
-                        refreshExisting(world, immutablePos, state);
+                        refreshExisting(pos, state);
                     }
                 }
             }
             return;
         }
 
-        refreshExisting(world, immutablePos, state);
+        refreshExisting(pos, state);
 
-        BlockPos otherPos = getConnectedPos(immutablePos, state);
+        BlockPos otherPos = getConnectedPos(pos, state);
         if (otherPos != null) {
             BlockState otherState = world.getBlockState(otherPos);
-            refreshExisting(world, otherPos, otherState);
+            refreshExisting(otherPos, otherState);
         }
 
         PendingPlacement pending = PENDING.get(posLong);
-        if (pending != null && state.is(pending.block())) {
-            if (ACTIVE.get(posLong) == null) {
-                start(world, immutablePos, state, pending.face(), pending.horizontalSign(), pending.verticalSign(), pending.velocity());
-            } else {
-                refreshExisting(world, immutablePos, state);
-            }
+        if (pending != null) {
+            if (state.is(pending.block())) {
+                ShakeeAnimationState existing = ACTIVE.get(posLong);
+                if (existing == null || existing.kind() != AnimationKind.PLACE
+                        || !state.is(existing.originalState().getBlock())) {
+                    if (existing != null) removeStateNow(world, pos);
+                    start(world, pos, state, pending.face(), pending.horizontalSign(), pending.verticalSign(), pending.velocity());
+                } else {
+                    refreshExisting(pos, state);
+                }
 
-            startConnectedIfPresent(world, immutablePos, state, pending.face(), pending.horizontalSign(), pending.verticalSign(), pending.velocity());
+                startConnectedIfPresent(world, pos, state, pending.face(), pending.horizontalSign(), pending.verticalSign(), pending.velocity());
+                PENDING.remove(posLong);
+                return;
+            }
             PENDING.remove(posLong);
-            return;
         }
 
-        ShakeeAnimationState connectedAnimation = findConnectedAnimation(world, immutablePos, state);
+        ShakeeAnimationState connectedAnimation = findConnectedAnimation(pos, state);
         if (connectedAnimation != null) {
             if (ACTIVE.get(posLong) == null) {
-                startSyncedFrom(world, immutablePos, state, connectedAnimation);
+                startSyncedFrom(world, pos, state, connectedAnimation);
             } else {
-                refreshExisting(world, immutablePos, state);
+                refreshExisting(pos, state);
             }
         }
     }
@@ -476,7 +516,7 @@ public final class ShakeeAnimationManager {
     ) {
         if (state.isAir() || !isBlockAllowed(state) || !ShakeeConfig.get().enablePlacementAnimation) return;
 
-        enforceMaxActiveAnimations(world);
+        if (!enforceMaxActiveAnimations(world)) return;
 
         BlockPos immutablePos = pos.immutable();
         ACTIVE.put(
@@ -493,6 +533,7 @@ public final class ShakeeAnimationManager {
                         velocity
                 )
         );
+        activeAnimationsPresent = true;
 
         if (shouldUseCustomWorldRender(state)) {
             hideStructure(world, immutablePos, state);
@@ -508,8 +549,8 @@ public final class ShakeeAnimationManager {
         }
     }
 
-    private static void enforceMaxActiveAnimations(ClientLevel world) {
-        if (ACTIVE.size() < MAX_ACTIVE_ANIMATIONS) return;
+    private static boolean enforceMaxActiveAnimations(ClientLevel world) {
+        if (ACTIVE.size() < MAX_ACTIVE_ANIMATIONS) return true;
 
         long oldestKey = -1L;
         long oldestTick = Long.MAX_VALUE;
@@ -529,11 +570,15 @@ public final class ShakeeAnimationManager {
             if (oldestState.usesCustomWorldRender()) {
                 unhideStructure(world, oldestState.pos(), oldestState.originalState());
             }
+            activeAnimationsPresent = !ACTIVE.isEmpty();
+            return true;
         }
+        return false;
     }
 
     private static void triggerNeighborRipples(ClientLevel world, BlockPos centerPos) {
         for (Direction dir : DIRECTIONS) {
+            if (ACTIVE.size() >= MAX_ACTIVE_ANIMATIONS) break;
             BlockPos neighborPos = centerPos.relative(dir);
             long neighborLong = neighborPos.asLong();
             if (ACTIVE.containsKey(neighborLong) || ShakeeRenderSuppressor.isSuppressed(neighborLong)) continue;
@@ -554,9 +599,9 @@ public final class ShakeeAnimationManager {
                             AnimationKind.RIPPLE
                     )
             );
+            activeAnimationsPresent = true;
 
-            if (!ShakeeRenderSuppressor.isSuppressed(neighborLong)) {
-                ShakeeRenderSuppressor.suppress(neighborLong);
+            if (ShakeeRenderSuppressor.suppress(neighborLong)) {
                 rerender(world, neighborPos);
             }
         }
@@ -581,14 +626,19 @@ public final class ShakeeAnimationManager {
 
         ShakeeAnimationState existing = ACTIVE.get(otherPos.asLong());
         if (existing != null) {
-            existing.updateState(otherState);
+            if (existing.kind() == AnimationKind.PLACE && otherState.is(existing.originalState().getBlock())) {
+                existing.updateState(otherState);
+            } else {
+                removeStateNow(world, otherPos);
+                start(world, otherPos, otherState, face, horizontalSign, verticalSign, velocity);
+            }
             return;
         }
 
         start(world, otherPos, otherState, face, horizontalSign, verticalSign, velocity);
     }
 
-    private static ShakeeAnimationState findConnectedAnimation(ClientLevel world, BlockPos pos, BlockState state) {
+    private static ShakeeAnimationState findConnectedAnimation(BlockPos pos, BlockState state) {
         if (state.isAir() || state.getBlock() instanceof ChestBlock) return null;
 
         BlockPos otherPos = getConnectedPos(pos, state);
@@ -623,11 +673,19 @@ public final class ShakeeAnimationManager {
         }
     }
 
-    private static void refreshExisting(ClientLevel world, BlockPos pos, BlockState state) {
+    private static void refreshExisting(BlockPos pos, BlockState state) {
         ShakeeAnimationState existing = ACTIVE.get(pos.asLong());
         if (existing != null && !state.isAir() && state.is(existing.originalState().getBlock())) {
             existing.updateState(state);
         }
+    }
+
+    private static void removeStateNow(ClientLevel world, BlockPos pos) {
+        ShakeeAnimationState state = ACTIVE.remove(pos.asLong());
+        if (state != null && state.usesCustomWorldRender()) {
+            unhideStructure(world, pos, state.originalState());
+        }
+        activeAnimationsPresent = !ACTIVE.isEmpty();
     }
 
     private static void removeBreakingStateNow(ClientLevel world, BlockPos pos) {
@@ -636,6 +694,7 @@ public final class ShakeeAnimationManager {
         if (state == null || state.kind() != AnimationKind.BREAK || state.isDestroyed()) return;
 
         ACTIVE.remove(posLong);
+        activeAnimationsPresent = !ACTIVE.isEmpty();
         if (state.usesCustomWorldRender()) {
             unhideStructure(world, pos, state.originalState());
         }
@@ -650,20 +709,12 @@ public final class ShakeeAnimationManager {
         if (state.isAir()) return;
 
         BlockPos immutablePos = pos.immutable();
-        ACTIVE.put(
-                immutablePos.asLong(),
-                new ShakeeAnimationState(
-                        immutablePos,
-                        state,
-                        source.face(),
-                        source.startTick(),
-                        ShakeeConfig.get().durationTicks,
-                        source.horizontalSign(),
-                        source.verticalSign(),
-                        source.kind(),
-                        source.velocity()
-                )
-        );
+        ShakeeAnimationState synced = new ShakeeAnimationState(source, immutablePos, state);
+        ACTIVE.put(immutablePos.asLong(), synced);
+        activeAnimationsPresent = true;
+        if (synced.usesCustomWorldRender()) {
+            hideStructure(world, immutablePos, state);
+        }
     }
 
     public static ShakeeAnimationState getForRender(ClientLevel world, BlockPos pos) {
@@ -712,26 +763,13 @@ public final class ShakeeAnimationManager {
         ShakeeAnimationState other = ACTIVE.get(otherPos.asLong());
         if (other == null || !other.originalState().is(state.getBlock())) return null;
 
-        return new ShakeeAnimationState(
-                pos.immutable(),
-                state,
-                other.face(),
-                other.startTick(),
-                other.kind() == AnimationKind.BREAK
-                        ? ShakeeConfig.get().breakingLoopTicks
-                        : ShakeeConfig.get().durationTicks,
-                other.horizontalSign(),
-                other.verticalSign(),
-                other.kind(),
-                other.velocity()
-        );
+        startSyncedFrom(world, pos, state, other);
+        return ACTIVE.get(posLong);
     }
 
     private static void hideStructure(ClientLevel world, BlockPos pos, BlockState state) {
         forEachStructurePos(world, pos, state, renderPos -> {
-            long pLong = renderPos.asLong();
-            if (!ShakeeRenderSuppressor.isSuppressed(pLong)) {
-                ShakeeRenderSuppressor.suppress(pLong);
+            if (ShakeeRenderSuppressor.suppress(renderPos.asLong())) {
                 rerender(world, renderPos);
             }
         });
@@ -795,9 +833,7 @@ public final class ShakeeAnimationManager {
     }
 
     private static boolean shouldUseCustomWorldRender(BlockState state) {
-        return state.getRenderShape() == RenderShape.MODEL
-                && !(state.getBlock() instanceof ChestBlock)
-                && !(state.getBlock() instanceof SignBlock);
+        return ShakeeAnimationState.shouldUseCustomWorldRender(state);
     }
 
     private static boolean isValidChestPair(BlockState state, BlockState otherState) {
@@ -843,7 +879,11 @@ public final class ShakeeAnimationManager {
             Vec3 velocity
     ) {
         ShakeeAnimationState existing = ACTIVE.get(pos.asLong());
-        if (existing == null) {
+        if (existing == null || existing.kind() != AnimationKind.PLACE
+                || !state.is(existing.originalState().getBlock())) {
+            if (existing != null) {
+                removeStateNow(world, pos);
+            }
             start(world, pos, state, face, horizontalSign, verticalSign, velocity);
         } else {
             existing.updateState(state);
@@ -856,7 +896,6 @@ public final class ShakeeAnimationManager {
     }
 
     private record PendingPlacement(
-            BlockPos targetPos,
             Block block,
             Direction face,
             int horizontalSign,

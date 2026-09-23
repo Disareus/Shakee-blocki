@@ -23,7 +23,7 @@ public class ShakeeBlocki implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             ShakeeAnimationManager.tick();
             if (client.level == null) {
-                ShakeeAnimationManager.clear();
+                ShakeeAnimationRenderer.clearPool();
             }
         });
     }

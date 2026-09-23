@@ -166,6 +166,15 @@ public class ShakeeConfigScreen {
          .setSaveConsumer(val -> config.breakingLoopTicks = val)
          .build());
 
+        breakingCategory.addEntry(entryBuilder.startIntSlider(
+                Component.translatable("shakee_blocki.config.breaking.keep_alive"),
+                config.breakingKeepAliveTicks,
+                1, 20
+        ).setDefaultValue(2)
+         .setTooltip(Component.translatable("shakee_blocki.config.breaking.keep_alive.tooltip"))
+         .setSaveConsumer(val -> config.breakingKeepAliveTicks = val)
+         .build());
+
         breakingCategory.addEntry(entryBuilder.startFloatField(
                 Component.translatable("shakee_blocki.config.breaking.horizontal_max_angle"),
                 config.breakingHorizontalMaxAngle
@@ -298,15 +307,16 @@ public class ShakeeConfigScreen {
         ).setDefaultValue("")
          .setTooltip(Component.translatable("shakee_blocki.config.filters.blacklist.tooltip"))
          .setSaveConsumer(val -> {
-             config.customExcludedBlocks = new java.util.ArrayList<>();
+             java.util.List<String> blocks = new java.util.ArrayList<>();
              if (val != null && !val.isBlank()) {
                  for (String part : val.split("[,;\\s]+")) {
                      String trimmed = part.trim();
                      if (!trimmed.isEmpty()) {
-                         config.customExcludedBlocks.add(trimmed);
+                         blocks.add(trimmed);
                      }
                  }
              }
+             config.setCustomExcludedBlocks(blocks);
          })
          .build());
 

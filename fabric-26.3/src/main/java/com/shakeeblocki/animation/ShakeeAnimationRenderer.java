@@ -19,7 +19,7 @@ import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Handles custom world rendering for animated blocks in Minecraft 26.1.2.
+ * Handles custom world rendering for animated blocks in Minecraft 26.3.
  * Uses a pooled render state list to eliminate per-frame object allocations.
  */
 public final class ShakeeAnimationRenderer {
@@ -83,7 +83,7 @@ public final class ShakeeAnimationRenderer {
             }
             poolIndex++;
 
-            submitter.submitMovingBlock(poseStack, renderState);
+            submitter.submitMovingBlock(poseStack, renderState, 0);
             poseStack.popPose();
         }
     }

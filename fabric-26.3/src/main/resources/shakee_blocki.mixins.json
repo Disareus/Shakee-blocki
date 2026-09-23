@@ -10,12 +10,13 @@
     "ChestBlockEntityRendererMixin",
     "ClientPlayerInteractionManagerMixin",
     "ClientWorldMixin",
+    "RenderSectionRegionMixin",
     "WorldRendererBlockDamageMixin",
     "WorldRendererOutlineMixin",
+    "sodium.BlockOcclusionCacheMixin",
     "sodium.BlockRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1
   }
 }
-

@@ -1,12 +1,13 @@
 package com.shakeeblocki.mixin;
 
+import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.shakeeblocki.animation.ShakeeAnimationManager;
 import com.shakeeblocki.animation.ShakeeAnimationState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
-import net.minecraft.client.renderer.state.level.BlockOutlineRenderState;
+import net.minecraft.client.renderer.state.level.BlockBreakingRenderState;
 import net.minecraft.client.renderer.state.level.LevelRenderState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
@@ -17,35 +18,34 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(LevelRenderer.class)
-public abstract class WorldRendererOutlineMixin {
+public abstract class WorldRendererBlockDamageMixin {
     @Inject(
-            method = "submitBlockOutline",
+            method = "submitBlockDestroyAnimation",
             at = @At(
                     value = "INVOKE",
                     target = "Lcom/mojang/blaze3d/vertex/PoseStack;translate(DDD)V",
                     shift = At.Shift.AFTER
             )
     )
-    private void applyOutlineAnimation(
+    private void applyDamageAnimation(
             PoseStack poseStack,
             SubmitNodeCollector submitter,
             LevelRenderState levelRenderState,
-            CallbackInfo ci
+            CallbackInfo ci,
+            @Local BlockBreakingRenderState state
     ) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (!ShakeeAnimationManager.hasActiveAnimations() || minecraft.level == null || levelRenderState == null || levelRenderState.blockOutlineRenderState == null) {
+        if (!ShakeeAnimationManager.hasActiveAnimations() || minecraft.level == null || state == null || state.blockPos() == null) {
             return;
         }
 
-        BlockOutlineRenderState state = levelRenderState.blockOutlineRenderState;
-        BlockPos pos = state.pos();
-        ShakeeAnimationState animation = ShakeeAnimationManager.getVisualAnimation(minecraft.level, pos);
+        ShakeeAnimationState animation = ShakeeAnimationManager.getBreaking(state.blockPos());
         if (animation == null) {
             return;
         }
 
-        BlockState blockState = minecraft.level.getBlockState(pos);
-        Vec3 offset = blockState.getOffset(pos);
+        BlockState blockState = state.blockState();
+        Vec3 offset = blockState != null ? blockState.getOffset(state.blockPos()) : Vec3.ZERO;
         float tickDelta = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false);
         poseStack.translate(offset.x, offset.y, offset.z);
         animation.applyLocal(poseStack, ShakeeAnimationManager.getClientTicks(), tickDelta);

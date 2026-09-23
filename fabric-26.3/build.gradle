@@ -20,9 +20,9 @@ dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     implementation "net.fabricmc:fabric-loader:${project.loader_version}"
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-    compileOnly files("libs/sodium-fabric-0.9.1+mc26.1.2.jar")
-    compileOnly files("libs/cloth-config-26.1.154.jar")
-    compileOnly files("libs/modmenu-18.0.0.jar")
+    compileOnly files("../fabric-26.1.2/libs/sodium-fabric-0.9.1+mc26.1.2.jar")
+    compileOnly files("../fabric-26.1.2/libs/cloth-config-26.1.154.jar")
+    compileOnly files("../fabric-26.1.2/libs/modmenu-18.0.0.jar")
 }
 
 def modVersion = project.version.toString()

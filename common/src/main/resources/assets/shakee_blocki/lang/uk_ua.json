@@ -37,6 +37,8 @@
   "shakee_blocki.config.breaking.start_delay.tooltip": "Кількість тіків перед початком анімації після початку руйнування (0 = миттєво).",
   "shakee_blocki.config.breaking.loop_ticks": "Тривалість циклу руйнування (тіки)",
   "shakee_blocki.config.breaking.loop_ticks.tooltip": "Тривалість одного повного циклу розгойдування блоку.",
+  "shakee_blocki.config.breaking.keep_alive": "Час утримання руйнування (тіки)",
+  "shakee_blocki.config.breaking.keep_alive.tooltip": "Скільки часу прогрес руйнування зберігається між оновленнями клієнта перед плавним поверненням блоку.",
   "shakee_blocki.config.breaking.horizontal_max_angle": "Кут розгойдування по горизонталі (°)",
   "shakee_blocki.config.breaking.horizontal_max_angle.tooltip": "Максимальний кут розгойдування по горизонталі при добуванні.",
   "shakee_blocki.config.breaking.vertical_max_angle": "Кут розгойдування по вертикалі (°)",

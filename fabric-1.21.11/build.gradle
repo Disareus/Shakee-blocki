@@ -1,6 +1,5 @@
 plugins {
     id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
-    id 'maven-publish'
 }
 
 version = project.mod_version
@@ -20,10 +19,6 @@ repositories {
         url = "https://maven.shedaniel.me/"
     }
     maven {
-        name = "TerraformersMC"
-        url = "https://maven.terraformersmc.com/releases/"
-    }
-    maven {
         name = "Modrinth"
         url = "https://api.modrinth.com/maven"
     }
@@ -39,18 +34,20 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
-    modApi("me.shedaniel.cloth:cloth-config-fabric:21.11.153") {
+    modCompileOnly("me.shedaniel.cloth:cloth-config-fabric:21.11.153") {
         exclude(group: "net.fabricmc.fabric-api")
     }
     modCompileOnly "curse.maven:modmenu-308702:8397851"
     modCompileOnly "maven.modrinth:sodium:mc1.21.11-0.8.0-fabric"
 }
 
+def modVersion = project.version.toString()
+
 processResources {
-    inputs.property "version", project.version
+    inputs.property "version", modVersion
 
     filesMatching("fabric.mod.json") {
-        expand "version": project.version
+        expand "version": modVersion
     }
 }
 
@@ -68,6 +65,7 @@ sourceSets {
     main {
         java {
             srcDir "../common/src/main/java"
+            exclude "com/shakeeblocki/mixin/sodium/BlockOcclusionCacheMixin.java"
         }
         resources {
             srcDir "../common/src/main/resources"

@@ -1,4 +1,4 @@
-﻿# Gradle files
+# Gradle files
 .gradle/
 build/
 !gradle/wrapper/gradle-wrapper.jar
@@ -8,7 +8,9 @@ run/
 **/run/
 fabric-1.21.11/build/
 fabric-26.1.2/build/
+fabric-26.3/build/
 common/build/
+**/build/
 
 # IDE metadata
 .idea/

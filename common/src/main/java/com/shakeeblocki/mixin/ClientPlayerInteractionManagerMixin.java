@@ -102,35 +102,54 @@ public abstract class ClientPlayerInteractionManagerMixin {
         }
     }
 
-    @Inject(method = "startDestroyBlock", at = @At("HEAD"))
-    private void captureInstantBreaking(
-            BlockPos pos,
-            Direction direction,
-            CallbackInfoReturnable<Boolean> cir
-    ) {
-        if (this.minecraft.player == null || this.minecraft.level == null) return;
-
-        BlockState state = this.minecraft.level.getBlockState(pos);
-        if (state.isAir()) return;
-
-        if (this.minecraft.player.getAbilities().instabuild
-                || state.getDestroyProgress(this.minecraft.player, this.minecraft.level, pos) >= 1.0F) {
-            ShakeeAnimationManager.onInstantBreak(this.minecraft.level, pos, state, direction);
-        }
-    }
+    @Unique
+    private BlockPos destroyTargetPos;
+    @Unique
+    private BlockState destroyTargetState;
+    @Unique
+    private Direction destroyTargetFace;
+    @Unique
+    private long destroyTargetTick = -1L;
 
     @Inject(method = "destroyBlock", at = @At("HEAD"))
     private void captureDestroyBlock(
             BlockPos pos,
             CallbackInfoReturnable<Boolean> cir
     ) {
+        destroyTargetPos = null;
+        destroyTargetState = null;
+        destroyTargetFace = null;
+        destroyTargetTick = -1L;
         if (this.minecraft.player == null || this.minecraft.level == null) return;
 
         BlockState state = this.minecraft.level.getBlockState(pos);
         if (state.isAir()) return;
 
-        Direction face = this.breakingFace != null ? this.breakingFace : Direction.UP;
-        ShakeeAnimationManager.onInstantBreak(this.minecraft.level, pos, state, face);
+        destroyTargetPos = pos.immutable();
+        destroyTargetState = state;
+        destroyTargetFace = this.breakingFace != null ? this.breakingFace : Direction.UP;
+        destroyTargetTick = ShakeeAnimationManager.getClientTicks();
+    }
+
+    @Inject(method = "destroyBlock", at = @At("RETURN"))
+    private void playDestroyAnimation(
+            BlockPos pos,
+            CallbackInfoReturnable<Boolean> cir
+    ) {
+        if (Boolean.TRUE.equals(cir.getReturnValue())
+                && destroyTargetPos != null
+                && destroyTargetState != null
+                && ShakeeAnimationManager.getClientTicks() - destroyTargetTick >= ShakeeConfig.get().breakingStartDelayTicks) {
+            ShakeeAnimationManager.onInstantBreak(
+                    this.minecraft.level,
+                    destroyTargetPos,
+                    destroyTargetState,
+                    destroyTargetFace != null ? destroyTargetFace : Direction.UP
+            );
+        }
+        destroyTargetPos = null;
+        destroyTargetState = null;
+        destroyTargetFace = null;
     }
 
     @Inject(method = "startDestroyBlock", at = @At("RETURN"))
@@ -183,15 +202,14 @@ public abstract class ClientPlayerInteractionManagerMixin {
             return;
         }
 
-        BlockPos immutablePos = pos.immutable();
-        if (!immutablePos.equals(this.breakingPos)) {
+        if (!pos.equals(this.breakingPos)) {
             if (this.breakingPos != null) {
                 BlockState oldState = world.getBlockState(this.breakingPos);
                 if (!oldState.isAir()) {
                     ShakeeAnimationManager.cancelBreakingNow(world, this.breakingPos);
                 }
             }
-            this.breakingPos = immutablePos;
+            this.breakingPos = pos.immutable();
             this.breakingFace = direction;
             this.breakingStartedAt = ShakeeAnimationManager.getClientTicks();
             return;

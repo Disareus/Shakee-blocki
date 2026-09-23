@@ -15,7 +15,6 @@ import net.minecraft.world.level.block.BaseRailBlock;
 import net.minecraft.world.level.block.BaseTorchBlock;
 import net.minecraft.world.level.block.BellBlock;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.BushBlock;
 import net.minecraft.world.level.block.ButtonBlock;
 import net.minecraft.world.level.block.CactusBlock;
 import net.minecraft.world.level.block.ChainBlock;
@@ -29,8 +28,8 @@ import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.world.level.block.LeverBlock;
 import net.minecraft.world.level.block.LightningRodBlock;
 import net.minecraft.world.level.block.ObserverBlock;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.PressurePlateBlock;
-import net.minecraft.world.level.block.RedStoneWireBlock;
 import net.minecraft.world.level.block.RedstoneLampBlock;
 import net.minecraft.world.level.block.SculkSensorBlock;
 import net.minecraft.world.level.block.SugarCaneBlock;
@@ -42,10 +41,17 @@ import net.minecraft.world.level.block.WeightedPressurePlateBlock;
 import net.minecraft.world.level.block.piston.PistonBaseBlock;
 
 import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 public class ShakeeConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -93,6 +99,7 @@ public class ShakeeConfig {
     public boolean filterTechnicalBlocks = true;
     public boolean filterFoliageAndPlants = false;
     public List<String> customExcludedBlocks = new ArrayList<>();
+    private transient Set<String> customExcludedIds = new HashSet<>();
 
     public static ShakeeConfig get() {
         if (INSTANCE == null) {
@@ -103,7 +110,7 @@ public class ShakeeConfig {
 
     public static void load() {
         if (CONFIG_FILE.exists()) {
-            try (FileReader reader = new FileReader(CONFIG_FILE)) {
+            try (var reader = Files.newBufferedReader(CONFIG_FILE.toPath(), StandardCharsets.UTF_8)) {
                 JsonObject json = JsonParser.parseReader(reader).getAsJsonObject();
                 INSTANCE = GSON.fromJson(json, ShakeeConfig.class);
                 if (INSTANCE == null) {
@@ -124,18 +131,103 @@ public class ShakeeConfig {
                     needSave = true;
                 }
 
+                if (INSTANCE.sanitize()) {
+                    needSave = true;
+                }
+                INSTANCE.rebuildCustomExclusionCache();
                 if (needSave) {
                     save();
                 }
                 return;
             } catch (Exception e) {
+                System.err.println("Shakee Blocki could not load its config; using defaults without overwriting the invalid file.");
                 INSTANCE = new ShakeeConfig();
-                save();
                 return;
             }
         }
         INSTANCE = new ShakeeConfig();
         save();
+    }
+
+    private boolean sanitize() {
+        boolean changed = false;
+        int value;
+
+        value = Math.clamp(durationTicks, 1, 40);
+        changed |= value != durationTicks;
+        durationTicks = value;
+        value = Math.clamp(breakingLoopTicks, 1, 40);
+        changed |= value != breakingLoopTicks;
+        breakingLoopTicks = value;
+        value = Math.clamp(breakingStartDelayTicks, 0, 20);
+        changed |= value != breakingStartDelayTicks;
+        breakingStartDelayTicks = value;
+        value = Math.clamp(breakingKeepAliveTicks, 1, 20);
+        changed |= value != breakingKeepAliveTicks;
+        breakingKeepAliveTicks = value;
+        value = Math.clamp(breakingReturnTicks, 1, 20);
+        changed |= value != breakingReturnTicks;
+        breakingReturnTicks = value;
+
+        float floatValue;
+        floatValue = safeFloat(horizontalMaxAngle, 0.0F, 90.0F, 15.0F);
+        changed |= floatValue != horizontalMaxAngle;
+        horizontalMaxAngle = floatValue;
+        floatValue = safeFloat(verticalMaxAngle, 0.0F, 90.0F, 15.0F);
+        changed |= floatValue != verticalMaxAngle;
+        verticalMaxAngle = floatValue;
+        floatValue = safeFloat(horizontalCycles, 0.1F, 10.0F, 1.5F);
+        changed |= floatValue != horizontalCycles;
+        horizontalCycles = floatValue;
+        floatValue = safeFloat(verticalCycles, 0.1F, 10.0F, 1.0F);
+        changed |= floatValue != verticalCycles;
+        verticalCycles = floatValue;
+        floatValue = safeFloat(expandInitialScale, 0.0F, 0.9F, 0.0F);
+        changed |= floatValue != expandInitialScale;
+        expandInitialScale = floatValue;
+        floatValue = safeFloat(neighborRippleIntensity, 0.1F, 3.0F, 1.0F);
+        changed |= floatValue != neighborRippleIntensity;
+        neighborRippleIntensity = floatValue;
+        floatValue = safeFloat(velocityBiasStrength, 0.1F, 5.0F, 1.0F);
+        changed |= floatValue != velocityBiasStrength;
+        velocityBiasStrength = floatValue;
+        floatValue = safeFloat(breakingMinScale, 0.0F, 0.9F, 0.5F);
+        changed |= floatValue != breakingMinScale;
+        breakingMinScale = floatValue;
+        floatValue = safeFloat(breakingHorizontalMaxAngle, 0.0F, 45.0F, 8.0F);
+        changed |= floatValue != breakingHorizontalMaxAngle;
+        breakingHorizontalMaxAngle = floatValue;
+        floatValue = safeFloat(breakingVerticalMaxAngle, 0.0F, 45.0F, 4.0F);
+        changed |= floatValue != breakingVerticalMaxAngle;
+        breakingVerticalMaxAngle = floatValue;
+        floatValue = safeFloat(breakingHorizontalCycles, 0.1F, 10.0F, 1.5F);
+        changed |= floatValue != breakingHorizontalCycles;
+        breakingHorizontalCycles = floatValue;
+        floatValue = safeFloat(breakingVerticalCycles, 0.1F, 10.0F, 1.0F);
+        changed |= floatValue != breakingVerticalCycles;
+        breakingVerticalCycles = floatValue;
+
+        if (placementMode == null) {
+            placementMode = PlacementMode.EXPAND;
+            changed = true;
+        }
+        if (easing == null) {
+            easing = Easing.EASE_IN_OUT;
+            changed = true;
+        }
+        if (breakingMode == null) {
+            breakingMode = BreakingMode.WOBBLE_AND_SHRINK;
+            changed = true;
+        }
+        if (breakingEasing == null) {
+            breakingEasing = Easing.CONSTANT;
+            changed = true;
+        }
+        return changed;
+    }
+
+    private static float safeFloat(float value, float min, float max, float fallback) {
+        return Float.isFinite(value) ? Math.clamp(value, min, max) : fallback;
     }
 
     public boolean isBlockAllowed(Block block) {
@@ -163,7 +255,7 @@ public class ShakeeConfig {
                 || block instanceof ButtonBlock
                 || block instanceof LeverBlock
                 || block instanceof BaseRailBlock
-                || block instanceof RedStoneWireBlock
+                || block == Blocks.REDSTONE_WIRE
                 || block instanceof DiodeBlock
                 || block instanceof PressurePlateBlock
                 || block instanceof WeightedPressurePlateBlock
@@ -193,37 +285,67 @@ public class ShakeeConfig {
                 || block instanceof GlowLichenBlock;
     }
 
-    private boolean isCustomExcluded(Block block) {
-        if (this.customExcludedBlocks == null || this.customExcludedBlocks.isEmpty()) {
-            return false;
-        }
-        Object rawId = BuiltInRegistries.BLOCK.getKey(block);
-        if (rawId == null) return false;
+    public void setCustomExcludedBlocks(List<String> blocks) {
+        this.customExcludedBlocks = blocks == null ? new ArrayList<>() : new ArrayList<>(blocks);
+        rebuildCustomExclusionCache();
+    }
 
-        String fullId = rawId.toString().toLowerCase();
-        String path = fullId.contains(":") ? fullId.substring(fullId.indexOf(':') + 1) : fullId;
+    private void rebuildCustomExclusionCache() {
+        if (this.customExcludedIds == null) {
+            this.customExcludedIds = new HashSet<>();
+        } else {
+            this.customExcludedIds.clear();
+        }
+
+        if (this.customExcludedBlocks == null) {
+            return;
+        }
 
         for (String rawEntry : this.customExcludedBlocks) {
             if (rawEntry == null) continue;
             for (String entry : rawEntry.split("[,;\\s]+")) {
-                String trimmed = entry.trim().toLowerCase();
-                if (trimmed.isEmpty()) continue;
-                if (trimmed.equals(fullId) || trimmed.equals(path)) {
-                    return true;
+                String normalized = entry.trim().toLowerCase(Locale.ROOT);
+                if (!normalized.isEmpty()) {
+                    this.customExcludedIds.add(normalized);
                 }
             }
         }
-        return false;
+    }
+
+    private boolean isCustomExcluded(Block block) {
+        if (this.customExcludedIds == null || this.customExcludedIds.isEmpty()) {
+            return false;
+        }
+
+        Object rawId = BuiltInRegistries.BLOCK.getKey(block);
+        if (rawId == null) return false;
+
+        String fullId = rawId.toString().toLowerCase(Locale.ROOT);
+        String path = fullId.indexOf(':') >= 0 ? fullId.substring(fullId.indexOf(':') + 1) : fullId;
+        return this.customExcludedIds.contains(fullId) || this.customExcludedIds.contains(path);
     }
 
     public static void save() {
+        if (INSTANCE != null) {
+            INSTANCE.sanitize();
+            INSTANCE.rebuildCustomExclusionCache();
+        }
         try {
             File parent = CONFIG_FILE.getParentFile();
-            if (parent != null && !parent.exists()) {
-                parent.mkdirs();
+            if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.exists()) {
+                throw new IOException("Could not create config directory");
             }
-            try (FileWriter writer = new FileWriter(CONFIG_FILE)) {
+
+            Path target = CONFIG_FILE.toPath();
+            Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
+            try (var writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8)) {
                 GSON.toJson(INSTANCE != null ? INSTANCE : new ShakeeConfig(), writer);
+            }
+
+            try {
+                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException ignored) {
+                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (Exception e) {
             e.printStackTrace();

@@ -9,7 +9,5 @@ public enum AnimationPhase {
     /** Converging/settling towards equilibrium upon mining release or placement completion. */
     SETTLING,
     /** World block render restored; temporary grace period while chunk mesh recompiles. */
-    RESTORING,
-    /** Fully finalized, ready for removal. */
-    DEAD
+    RESTORING
 }

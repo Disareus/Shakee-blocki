@@ -45,7 +45,7 @@ public abstract class WorldRendererOutlineMixin {
         }
 
         BlockState blockState = minecraft.level.getBlockState(pos);
-        Vec3 offset = blockState.getOffset(pos);
+        Vec3 offset = blockState != null ? blockState.getOffset(pos) : Vec3.ZERO;
         float tickDelta = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false);
         poseStack.translate(offset.x, offset.y, offset.z);
         animation.applyLocal(poseStack, ShakeeAnimationManager.getClientTicks(), tickDelta);

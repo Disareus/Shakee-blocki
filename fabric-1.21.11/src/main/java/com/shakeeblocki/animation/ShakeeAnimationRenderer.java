@@ -40,6 +40,10 @@ public final class ShakeeAnimationRenderer {
 
     private ShakeeAnimationRenderer() {}
 
+    public static void clearPool() {
+        REUSABLE_STATE.reset();
+    }
+
     public static void render(WorldRenderContext context) {
         if (!ShakeeAnimationManager.hasActiveAnimations()) return;
 
@@ -118,6 +122,14 @@ public final class ShakeeAnimationRenderer {
             this.blockState = state;
             this.biome = world.getBiome(pos);
             this.level = world;
+        }
+
+        public void reset() {
+            this.world = null;
+            this.level = null;
+            this.blockPos = null;
+            this.blockState = null;
+            this.randomSeedPos = null;
         }
 
         @Override
