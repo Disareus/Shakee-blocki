@@ -2,7 +2,6 @@ package com.shakeeblocki.mixin;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.shakeeblocki.animation.AnimationKind;
 import com.shakeeblocki.animation.ShakeeAnimationManager;
 import com.shakeeblocki.animation.ShakeeAnimationState;
 import net.minecraft.client.Minecraft;
@@ -28,7 +27,7 @@ public abstract class WorldRendererOutlineMixin {
     @Unique
     private boolean pushedOutlinePose;
 
-    @Inject(method = "renderHitOutline", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "renderHitOutline", at = @At("HEAD"))
     private void applyOutlineAnimation(
             PoseStack poseStack,
             VertexConsumer builder,
@@ -55,13 +54,11 @@ public abstract class WorldRendererOutlineMixin {
         this.pushedOutlinePose = true;
 
         BlockState blockState = this.minecraft.level.getBlockState(pos);
-        Vec3 offset = blockState != null ? blockState.getOffset(pos) : Vec3.ZERO;
+        Vec3 offset = blockState.getOffset(pos);
         float tickDelta = this.minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false);
-        poseStack.translate(pos.getX() - camX, pos.getY() - camY, pos.getZ() - camZ);
         poseStack.translate(offset.x, offset.y, offset.z);
         animation.applyLocal(poseStack, ShakeeAnimationManager.getClientTicks(), tickDelta);
         poseStack.translate(-offset.x, -offset.y, -offset.z);
-        poseStack.translate(-(pos.getX() - camX), -(pos.getY() - camY), -(pos.getZ() - camZ));
     }
 
     @Inject(method = "renderHitOutline", at = @At("RETURN"))

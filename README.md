@@ -77,9 +77,9 @@ Or build a specific version:
 ```
 
 Compiled `.jar` artifacts will be located in:
-* `fabric-1.21.11/build/libs/shakee_blocki-1.21.11-1.0.0.jar`
-* `fabric-26.1.2/build/libs/shakee_blocki-26.1.2-1.0.0.jar`
-* `fabric-26.3/build/libs/shakee_blocki-26.3-1.0.0.jar`
+* `fabric-1.21.11/build/libs/shakee_blocki-1.21.11-1.0.1.jar`
+* `fabric-26.1.2/build/libs/shakee_blocki-26.1.2-1.0.1.jar`
+* `fabric-26.3/build/libs/shakee_blocki-26.3-1.0.1.jar`
 
 ---
 
