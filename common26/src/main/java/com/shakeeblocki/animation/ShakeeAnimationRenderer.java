@@ -3,6 +3,7 @@ package com.shakeeblocki.animation;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.shakeeblocki.compat.ShakeeSubmitAdapter;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
 import net.minecraft.client.Minecraft;
@@ -19,7 +20,7 @@ import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Handles custom world rendering for animated blocks in Minecraft 26.1.2.
+ * Handles custom world rendering for animated blocks in Minecraft 26.3.
  * Uses a pooled render state list to eliminate per-frame object allocations.
  */
 public final class ShakeeAnimationRenderer {
@@ -40,7 +41,6 @@ public final class ShakeeAnimationRenderer {
         if (world == null) return;
 
         PoseStack poseStack = context.poseStack();
-        SubmitNodeCollector submitter = context.submitNodeCollector();
         float tickDelta = client.getDeltaTracker().getGameTimeDeltaPartialTick(false);
         Vec3 cameraPos = context.levelState().cameraRenderState != null && context.levelState().cameraRenderState.pos != null
                 ? context.levelState().cameraRenderState.pos
@@ -83,7 +83,7 @@ public final class ShakeeAnimationRenderer {
             }
             poolIndex++;
 
-            submitter.submitMovingBlock(poseStack, renderState);
+            ShakeeSubmitAdapter.get().submitMovingBlock(context.submitNodeCollector(), poseStack, renderState);
             poseStack.popPose();
         }
     }

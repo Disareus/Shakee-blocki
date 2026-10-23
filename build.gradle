@@ -4,12 +4,14 @@ plugins {
 
 allprojects {
     group = 'com.shakeeblocki'
-    version = '1.0.1'
+    version = '1.0.2'
 }
 
 tasks.register('buildAll') {
     group = 'build'
     description = 'Builds all subprojects for all Minecraft versions.'
-    dependsOn subprojects.collect { it.tasks.named('build') }
+    // fabric-26.2 is a compile-time compatibility probe only, not a release target.
+    dependsOn subprojects.findAll { it.name != 'fabric-26.2' }
+            .collect { it.tasks.named('build') }
 }
 

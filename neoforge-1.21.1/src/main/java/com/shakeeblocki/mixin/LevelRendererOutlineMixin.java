@@ -6,8 +6,8 @@ import com.shakeeblocki.animation.ShakeeAnimationManager;
 import com.shakeeblocki.animation.ShakeeAnimationState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
-import net.minecraft.client.renderer.state.level.BlockOutlineRenderState;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Final;
@@ -18,8 +18,12 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+/**
+ * Port note: 1.21.1 still takes the entity + pos/state parameters directly; newer
+ * versions moved to a BlockOutlineRenderState agnostic architecture.
+ */
 @Mixin(LevelRenderer.class)
-public abstract class WorldRendererOutlineMixin {
+public abstract class LevelRendererOutlineMixin {
     @Shadow
     @Final
     private Minecraft minecraft;
@@ -31,20 +35,19 @@ public abstract class WorldRendererOutlineMixin {
     private void applyOutlineAnimation(
             PoseStack poseStack,
             VertexConsumer builder,
+            Entity entity,
             double camX,
             double camY,
             double camZ,
-            BlockOutlineRenderState state,
-            int color,
-            float width,
+            BlockPos pos,
+            BlockState state,
             CallbackInfo ci
     ) {
         this.pushedOutlinePose = false;
-        if (!ShakeeAnimationManager.hasActiveAnimations() || this.minecraft.level == null || state == null) {
+        if (!ShakeeAnimationManager.hasActiveAnimations() || this.minecraft.level == null) {
             return;
         }
 
-        BlockPos pos = state.pos();
         ShakeeAnimationState animation = ShakeeAnimationManager.getVisualAnimation(this.minecraft.level, pos);
         if (animation == null) {
             return;
@@ -53,9 +56,8 @@ public abstract class WorldRendererOutlineMixin {
         poseStack.pushPose();
         this.pushedOutlinePose = true;
 
-        BlockState blockState = this.minecraft.level.getBlockState(pos);
-        Vec3 offset = blockState.getOffset(pos);
-        float tickDelta = this.minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false);
+        Vec3 offset = state.getOffset(this.minecraft.level, pos);
+        float tickDelta = this.minecraft.getTimer().getGameTimeDeltaPartialTick(false);
         poseStack.translate(offset.x, offset.y, offset.z);
         animation.applyLocal(poseStack, ShakeeAnimationManager.getClientTicks(), tickDelta);
         poseStack.translate(-offset.x, -offset.y, -offset.z);
@@ -65,12 +67,12 @@ public abstract class WorldRendererOutlineMixin {
     private void popOutlineAnimation(
             PoseStack poseStack,
             VertexConsumer builder,
+            Entity entity,
             double camX,
             double camY,
             double camZ,
-            BlockOutlineRenderState state,
-            int color,
-            float width,
+            BlockPos pos,
+            BlockState state,
             CallbackInfo ci
     ) {
         if (this.pushedOutlinePose) {

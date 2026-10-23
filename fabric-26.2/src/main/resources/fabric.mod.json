@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "id": "shakee_blocki",
+  "version": "${version}",
+  "name": "Shakee Blocki",
+  "description": "Juicy, physics-like block shaking, rotating, and bouncing animations on mining and placement.",
+  "authors": [
+    "Disareus"
+  ],
+  "contact": {
+    "homepage": "https://github.com/Disareus/Shakee-blocki",
+    "sources": "https://github.com/Disareus/Shakee-blocki"
+  },
+  "license": "MIT",
+  "icon": "assets/shakee_blocki/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.shakeeblocki.ShakeeBlocki"
+    ],
+    "modmenu": [
+      "com.shakeeblocki.config.ShakeeModMenu"
+    ]
+  },
+  "mixins": [
+    "shakee_blocki.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "fabric-api": "*",
+    "minecraft": "26.2",
+    "java": ">=25",
+    "mixinextras": "*",
+    "cloth-config": "*"
+  },
+  "suggests": {
+    "modmenu": "*",
+    "sodium": "*"
+  }
+}

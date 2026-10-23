@@ -1,0 +1,36 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+[[mods]]
+modId = "shakee_blocki"
+version = "${version}"
+displayName = "Shakee Blocki"
+description = "Juicy, physics-like block shaking, rotating, and bouncing animations on mining and placement."
+authors = "Disareus"
+logoFile = "assets/shakee_blocki/icon.png"
+logoBlur = false
+
+[[dependencies.shakee_blocki]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.shakee_blocki]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21,1.21.2)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.shakee_blocki]]
+modId = "cloth_config"
+type = "required"
+versionRange = "[15,)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[mixins]]
+config = "shakee_blocki.mixins.json"

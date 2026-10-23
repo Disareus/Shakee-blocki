@@ -7,7 +7,7 @@ import com.google.gson.JsonParser;
 import com.shakeeblocki.animation.BreakingMode;
 import com.shakeeblocki.animation.Easing;
 import com.shakeeblocki.animation.PlacementMode;
-import net.fabricmc.loader.api.FabricLoader;
+import com.shakeeblocki.platform.ShakeePlatform;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.BambooSaplingBlock;
 import net.minecraft.world.level.block.BambooStalkBlock;
@@ -15,6 +15,7 @@ import net.minecraft.world.level.block.BaseRailBlock;
 import net.minecraft.world.level.block.BaseTorchBlock;
 import net.minecraft.world.level.block.BellBlock;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.BushBlock;
 import net.minecraft.world.level.block.ButtonBlock;
 import net.minecraft.world.level.block.CactusBlock;
 import net.minecraft.world.level.block.ChainBlock;
@@ -35,7 +36,6 @@ import net.minecraft.world.level.block.SculkSensorBlock;
 import net.minecraft.world.level.block.SugarCaneBlock;
 import net.minecraft.world.level.block.TripWireBlock;
 import net.minecraft.world.level.block.TripWireHookBlock;
-import net.minecraft.world.level.block.VegetationBlock;
 import net.minecraft.world.level.block.VineBlock;
 import net.minecraft.world.level.block.WeightedPressurePlateBlock;
 import net.minecraft.world.level.block.piston.PistonBaseBlock;
@@ -55,19 +55,14 @@ import java.util.Set;
 
 public class ShakeeConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final File CONFIG_FILE = FabricLoader.getInstance().getConfigDir().resolve("shakee_blocki.json").toFile();
+    private static volatile File configFile = null;
     private static ShakeeConfig INSTANCE;
 
     // --- Placement Settings ---
     public boolean enablePlacementAnimation = true;
     public PlacementMode placementMode = PlacementMode.EXPAND;
     public int durationTicks = 6;
-    public float horizontalMaxAngle = 15.0F;
-    public float verticalMaxAngle = 15.0F;
-    public float horizontalCycles = 1.5F;
-    public float verticalCycles = 1.0F;
     public Easing easing = Easing.EASE_IN_OUT;
-    public boolean randomizeDirection = true;
 
     // Expand Mode Specific
     public float expandInitialScale = 0.0F;
@@ -81,18 +76,12 @@ public class ShakeeConfig {
 
     // --- Breaking Settings ---
     public boolean enableBreakingAnimation = true;
-    public BreakingMode breakingMode = BreakingMode.WOBBLE_AND_SHRINK;
+    public BreakingMode breakingMode = BreakingMode.SQUASH_AND_STRETCH;
     public float breakingMinScale = 0.5F;
     public int breakingLoopTicks = 6;
     public int breakingStartDelayTicks = 0;
     public int breakingKeepAliveTicks = 2;
     public boolean breakingAnimateConnectedBlocks = true;
-    public float breakingHorizontalMaxAngle = 8.0F;
-    public float breakingVerticalMaxAngle = 4.0F;
-    public float breakingHorizontalCycles = 1.5F;
-    public float breakingVerticalCycles = 1.0F;
-    public Easing breakingEasing = Easing.CONSTANT;
-    public boolean breakingRandomizeDirection = true;
     public int breakingReturnTicks = 4;
 
     // --- Filters & Exclusions ---
@@ -100,6 +89,15 @@ public class ShakeeConfig {
     public boolean filterFoliageAndPlants = false;
     public List<String> customExcludedBlocks = new ArrayList<>();
     private transient Set<String> customExcludedIds = new HashSet<>();
+
+    private static File configFile() {
+        File file = configFile;
+        if (file == null) {
+            file = ShakeePlatform.configDir().resolve("shakee_blocki.json").toFile();
+            configFile = file;
+        }
+        return file;
+    }
 
     public static ShakeeConfig get() {
         if (INSTANCE == null) {
@@ -109,8 +107,9 @@ public class ShakeeConfig {
     }
 
     public static void load() {
-        if (CONFIG_FILE.exists()) {
-            try (var reader = Files.newBufferedReader(CONFIG_FILE.toPath(), StandardCharsets.UTF_8)) {
+        File file = configFile();
+        if (file.exists()) {
+            try (var reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
                 JsonObject json = JsonParser.parseReader(reader).getAsJsonObject();
                 INSTANCE = GSON.fromJson(json, ShakeeConfig.class);
                 if (INSTANCE == null) {
@@ -170,18 +169,6 @@ public class ShakeeConfig {
         breakingReturnTicks = value;
 
         float floatValue;
-        floatValue = safeFloat(horizontalMaxAngle, 0.0F, 90.0F, 15.0F);
-        changed |= floatValue != horizontalMaxAngle;
-        horizontalMaxAngle = floatValue;
-        floatValue = safeFloat(verticalMaxAngle, 0.0F, 90.0F, 15.0F);
-        changed |= floatValue != verticalMaxAngle;
-        verticalMaxAngle = floatValue;
-        floatValue = safeFloat(horizontalCycles, 0.1F, 10.0F, 1.5F);
-        changed |= floatValue != horizontalCycles;
-        horizontalCycles = floatValue;
-        floatValue = safeFloat(verticalCycles, 0.1F, 10.0F, 1.0F);
-        changed |= floatValue != verticalCycles;
-        verticalCycles = floatValue;
         floatValue = safeFloat(expandInitialScale, 0.0F, 0.9F, 0.0F);
         changed |= floatValue != expandInitialScale;
         expandInitialScale = floatValue;
@@ -194,18 +181,6 @@ public class ShakeeConfig {
         floatValue = safeFloat(breakingMinScale, 0.0F, 0.9F, 0.5F);
         changed |= floatValue != breakingMinScale;
         breakingMinScale = floatValue;
-        floatValue = safeFloat(breakingHorizontalMaxAngle, 0.0F, 45.0F, 8.0F);
-        changed |= floatValue != breakingHorizontalMaxAngle;
-        breakingHorizontalMaxAngle = floatValue;
-        floatValue = safeFloat(breakingVerticalMaxAngle, 0.0F, 45.0F, 4.0F);
-        changed |= floatValue != breakingVerticalMaxAngle;
-        breakingVerticalMaxAngle = floatValue;
-        floatValue = safeFloat(breakingHorizontalCycles, 0.1F, 10.0F, 1.5F);
-        changed |= floatValue != breakingHorizontalCycles;
-        breakingHorizontalCycles = floatValue;
-        floatValue = safeFloat(breakingVerticalCycles, 0.1F, 10.0F, 1.0F);
-        changed |= floatValue != breakingVerticalCycles;
-        breakingVerticalCycles = floatValue;
 
         if (placementMode == null) {
             placementMode = PlacementMode.EXPAND;
@@ -216,11 +191,7 @@ public class ShakeeConfig {
             changed = true;
         }
         if (breakingMode == null) {
-            breakingMode = BreakingMode.WOBBLE_AND_SHRINK;
-            changed = true;
-        }
-        if (breakingEasing == null) {
-            breakingEasing = Easing.CONSTANT;
+            breakingMode = BreakingMode.SQUASH_AND_STRETCH;
             changed = true;
         }
         return changed;
@@ -275,7 +246,9 @@ public class ShakeeConfig {
     }
 
     public static boolean isFoliageBlock(Block block) {
-        return block instanceof VegetationBlock
+        // BushBlock covers small plants on all supported versions; newer versions
+        // renamed the grass/dry-plant family to VegetationBlock (a BushBlock parent).
+        return block instanceof BushBlock
                 || block instanceof LeavesBlock
                 || block instanceof SugarCaneBlock
                 || block instanceof CactusBlock
@@ -331,12 +304,12 @@ public class ShakeeConfig {
             INSTANCE.rebuildCustomExclusionCache();
         }
         try {
-            File parent = CONFIG_FILE.getParentFile();
+            File parent = configFile().getParentFile();
             if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.exists()) {
                 throw new IOException("Could not create config directory");
             }
 
-            Path target = CONFIG_FILE.toPath();
+            Path target = configFile().toPath();
             Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
             try (var writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8)) {
                 GSON.toJson(INSTANCE != null ? INSTANCE : new ShakeeConfig(), writer);

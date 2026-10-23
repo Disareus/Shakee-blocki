@@ -3,9 +3,11 @@ package com.shakeeblocki;
 import com.shakeeblocki.animation.ShakeeAnimationManager;
 import com.shakeeblocki.animation.ShakeeAnimationRenderer;
 import com.shakeeblocki.config.ShakeeConfig;
+import com.shakeeblocki.platform.ShakeePlatform;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
+import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,6 +17,7 @@ public class ShakeeBlocki implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        ShakeePlatform.init(FabricLoader.getInstance().getConfigDir());
         ShakeeConfig.load();
         LOGGER.info("Shakee Blocki initialized!");
 

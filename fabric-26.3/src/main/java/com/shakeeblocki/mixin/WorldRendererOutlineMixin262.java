@@ -17,7 +17,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(LevelRenderer.class)
-public abstract class WorldRendererOutlineMixin {
+public abstract class WorldRendererOutlineMixin262 {
     @Inject(
             method = "submitBlockOutline",
             at = @At(

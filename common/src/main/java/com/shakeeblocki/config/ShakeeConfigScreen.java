@@ -66,42 +66,6 @@ public class ShakeeConfigScreen {
          .setSaveConsumer(val -> config.expandOvershoot = val)
          .build());
 
-        placementCategory.addEntry(entryBuilder.startFloatField(
-                Component.translatable("shakee_blocki.config.placement.horizontal_max_angle"),
-                config.horizontalMaxAngle
-        ).setDefaultValue(15.0F)
-         .setMin(0.0F).setMax(90.0F)
-         .setTooltip(Component.translatable("shakee_blocki.config.placement.horizontal_max_angle.tooltip"))
-         .setSaveConsumer(val -> config.horizontalMaxAngle = val)
-         .build());
-
-        placementCategory.addEntry(entryBuilder.startFloatField(
-                Component.translatable("shakee_blocki.config.placement.vertical_max_angle"),
-                config.verticalMaxAngle
-        ).setDefaultValue(15.0F)
-         .setMin(0.0F).setMax(90.0F)
-         .setTooltip(Component.translatable("shakee_blocki.config.placement.vertical_max_angle.tooltip"))
-         .setSaveConsumer(val -> config.verticalMaxAngle = val)
-         .build());
-
-        placementCategory.addEntry(entryBuilder.startFloatField(
-                Component.translatable("shakee_blocki.config.placement.horizontal_cycles"),
-                config.horizontalCycles
-        ).setDefaultValue(1.5F)
-         .setMin(0.1F).setMax(10.0F)
-         .setTooltip(Component.translatable("shakee_blocki.config.placement.horizontal_cycles.tooltip"))
-         .setSaveConsumer(val -> config.horizontalCycles = val)
-         .build());
-
-        placementCategory.addEntry(entryBuilder.startFloatField(
-                Component.translatable("shakee_blocki.config.placement.vertical_cycles"),
-                config.verticalCycles
-        ).setDefaultValue(1.0F)
-         .setMin(0.1F).setMax(10.0F)
-         .setTooltip(Component.translatable("shakee_blocki.config.placement.vertical_cycles.tooltip"))
-         .setSaveConsumer(val -> config.verticalCycles = val)
-         .build());
-
         placementCategory.addEntry(entryBuilder.startEnumSelector(
                 Component.translatable("shakee_blocki.config.placement.easing"),
                 Easing.class,
@@ -109,14 +73,6 @@ public class ShakeeConfigScreen {
         ).setDefaultValue(Easing.EASE_IN_OUT)
          .setTooltip(Component.translatable("shakee_blocki.config.placement.easing.tooltip"))
          .setSaveConsumer(val -> config.easing = val)
-         .build());
-
-        placementCategory.addEntry(entryBuilder.startBooleanToggle(
-                Component.translatable("shakee_blocki.config.placement.randomize"),
-                config.randomizeDirection
-        ).setDefaultValue(true)
-         .setTooltip(Component.translatable("shakee_blocki.config.placement.randomize.tooltip"))
-         .setSaveConsumer(val -> config.randomizeDirection = val)
          .build());
 
         // --- Breaking Category ---
@@ -133,8 +89,8 @@ public class ShakeeConfigScreen {
         breakingCategory.addEntry(entryBuilder.startEnumSelector(
                 Component.translatable("shakee_blocki.config.breaking.mode"),
                 BreakingMode.class,
-                config.breakingMode != null ? config.breakingMode : BreakingMode.WOBBLE_AND_SHRINK
-        ).setDefaultValue(BreakingMode.WOBBLE_AND_SHRINK)
+                config.breakingMode != null ? config.breakingMode : BreakingMode.SQUASH_AND_STRETCH
+        ).setDefaultValue(BreakingMode.SQUASH_AND_STRETCH)
          .setTooltip(Component.translatable("shakee_blocki.config.breaking.mode.tooltip"))
          .setSaveConsumer(val -> config.breakingMode = val)
          .build());
@@ -175,51 +131,6 @@ public class ShakeeConfigScreen {
          .setSaveConsumer(val -> config.breakingKeepAliveTicks = val)
          .build());
 
-        breakingCategory.addEntry(entryBuilder.startFloatField(
-                Component.translatable("shakee_blocki.config.breaking.horizontal_max_angle"),
-                config.breakingHorizontalMaxAngle
-        ).setDefaultValue(8.0F)
-         .setMin(0.0F).setMax(45.0F)
-         .setTooltip(Component.translatable("shakee_blocki.config.breaking.horizontal_max_angle.tooltip"))
-         .setSaveConsumer(val -> config.breakingHorizontalMaxAngle = val)
-         .build());
-
-        breakingCategory.addEntry(entryBuilder.startFloatField(
-                Component.translatable("shakee_blocki.config.breaking.vertical_max_angle"),
-                config.breakingVerticalMaxAngle
-        ).setDefaultValue(4.0F)
-         .setMin(0.0F).setMax(45.0F)
-         .setTooltip(Component.translatable("shakee_blocki.config.breaking.vertical_max_angle.tooltip"))
-         .setSaveConsumer(val -> config.breakingVerticalMaxAngle = val)
-         .build());
-
-        breakingCategory.addEntry(entryBuilder.startFloatField(
-                Component.translatable("shakee_blocki.config.breaking.horizontal_cycles"),
-                config.breakingHorizontalCycles
-        ).setDefaultValue(1.5F)
-         .setMin(0.1F).setMax(10.0F)
-         .setTooltip(Component.translatable("shakee_blocki.config.breaking.horizontal_cycles.tooltip"))
-         .setSaveConsumer(val -> config.breakingHorizontalCycles = val)
-         .build());
-
-        breakingCategory.addEntry(entryBuilder.startFloatField(
-                Component.translatable("shakee_blocki.config.breaking.vertical_cycles"),
-                config.breakingVerticalCycles
-        ).setDefaultValue(1.0F)
-         .setMin(0.1F).setMax(10.0F)
-         .setTooltip(Component.translatable("shakee_blocki.config.breaking.vertical_cycles.tooltip"))
-         .setSaveConsumer(val -> config.breakingVerticalCycles = val)
-         .build());
-
-        breakingCategory.addEntry(entryBuilder.startEnumSelector(
-                Component.translatable("shakee_blocki.config.breaking.easing"),
-                Easing.class,
-                config.breakingEasing != null ? config.breakingEasing : Easing.CONSTANT
-        ).setDefaultValue(Easing.CONSTANT)
-         .setTooltip(Component.translatable("shakee_blocki.config.breaking.easing.tooltip"))
-         .setSaveConsumer(val -> config.breakingEasing = val)
-         .build());
-
         breakingCategory.addEntry(entryBuilder.startIntSlider(
                 Component.translatable("shakee_blocki.config.breaking.return_ticks"),
                 config.breakingReturnTicks,
@@ -227,14 +138,6 @@ public class ShakeeConfigScreen {
         ).setDefaultValue(4)
          .setTooltip(Component.translatable("shakee_blocki.config.breaking.return_ticks.tooltip"))
          .setSaveConsumer(val -> config.breakingReturnTicks = val)
-         .build());
-
-        breakingCategory.addEntry(entryBuilder.startBooleanToggle(
-                Component.translatable("shakee_blocki.config.breaking.randomize"),
-                config.breakingRandomizeDirection
-        ).setDefaultValue(true)
-         .setTooltip(Component.translatable("shakee_blocki.config.breaking.randomize.tooltip"))
-         .setSaveConsumer(val -> config.breakingRandomizeDirection = val)
          .build());
 
         breakingCategory.addEntry(entryBuilder.startBooleanToggle(

@@ -1,0 +1,67 @@
+plugins {
+    id 'net.neoforged.moddev' version "${moddev_version}"
+}
+
+version = project.mod_version
+group = project.maven_group
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        name = "Shedaniel"
+        url = "https://maven.shedaniel.me/"
+    }
+}
+
+dependencies {
+    compileOnly "me.shedaniel.cloth:cloth-config-neoforge:${project.cloth_config_version}"
+}
+
+def modVersion = project.version.toString()
+
+processResources {
+    inputs.property "version", modVersion
+
+    filesMatching(["META-INF/neoforge.mods.toml"]) {
+        expand "version": modVersion
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 21
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+// The shared `common` sources are compiled again in this module, with all
+// Fabric-only classes removed. Platform replacements live in this module's src.
+sourceSets {
+    main {
+        java {
+            srcDir "../common/src/main/java"
+            exclude "com/shakeeblocki/config/ShakeeModMenu.java"
+            exclude "com/shakeeblocki/mixin/ShakeeMixinPlugin.java"
+            exclude "com/shakeeblocki/mixin/sodium/**"
+        }
+        resources {
+            srcDir "../common/src/main/resources"
+        }
+    }
+}
+
+neoForge {
+    version = project.neoforge_version
+
+    mods {
+        "${project.archives_base_name}" {
+            sourceSet sourceSets.main
+        }
+    }
+}

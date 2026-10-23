@@ -49,6 +49,8 @@ sourceSets {
     main {
         java {
             srcDir "../common/src/main/java"
+            // Shared render pipeline for the 26.1.2-26.3 unified jar.
+            srcDir "../common26/src/main/java"
         }
         resources {
             srcDir "../common/src/main/resources"

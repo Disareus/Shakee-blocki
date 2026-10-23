@@ -1,0 +1,62 @@
+plugins {
+    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+}
+
+version = project.mod_version
+group = project.maven_group
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        name = "Fabric"
+        url = "https://maven.fabricmc.net/"
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    compileOnly files("../fabric-26.1.2/libs/sodium-fabric-0.9.1+mc26.1.2.jar")
+    compileOnly files("../fabric-26.1.2/libs/cloth-config-26.1.154.jar")
+    compileOnly files("../fabric-26.1.2/libs/modmenu-18.0.0.jar")
+}
+
+def modVersion = project.version.toString()
+
+processResources {
+    inputs.property "version", modVersion
+
+    filesMatching("fabric.mod.json") {
+        expand "version": modVersion
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 25
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+}
+
+sourceSets {
+    main {
+        java {
+            // Compatibility probe: compiles the 26.3-variant code against Minecraft 26.2
+            // to verify that the unified 26.1.2-26.3 jar's "modern" classes are also
+            // valid for 26.2. Produced jars are for verification only, not for release.
+            srcDir "../fabric-26.3/src/main/java"
+            srcDir "../common26/src/main/java"
+            srcDir "../common/src/main/java"
+        }
+        resources {
+            srcDir "../common/src/main/resources"
+        }
+    }
+}

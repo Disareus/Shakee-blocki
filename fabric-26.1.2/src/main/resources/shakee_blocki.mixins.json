@@ -12,7 +12,7 @@
     "ClientWorldMixin",
     "RenderSectionRegionMixin",
     "WorldRendererBlockDamageMixin",
-    "WorldRendererOutlineMixin",
+    "WorldRendererOutlineMixin261",
     "sodium.BlockOcclusionCacheMixin",
     "sodium.BlockRendererMixin"
   ],

@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.shakeeblocki.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "plugin": "com.shakeeblocki.mixin.ShakeeNeoForgeMixinPlugin",
+  "client": [
+    "BlockDamageRenderMixin",
+    "BlockEntityRenderDispatcherMixin",
+    "BlockFaceCullingMixin",
+    "BlockModelRendererMixin",
+    "ClientPlayerInteractionManagerMixin",
+    "ClientWorldMixin",
+    "LevelRendererOutlineMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

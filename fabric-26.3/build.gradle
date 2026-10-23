@@ -27,6 +27,43 @@ dependencies {
 
 def modVersion = project.version.toString()
 
+// Builds the unified jar that runs on Minecraft 26.1.2 through 26.3:
+//  - base classes + resources from this module (compiled against MC 26.3)
+//  - plus the compat261 classes, compiled against MC 26.1.2 in :fabric-26.1.2
+// Version-specific mixins/adapters are selected at runtime by ShakeeMixinPlugin.
+// Builds the unified jar that runs on Minecraft 26.1.2 through 26.3:
+//  - base classes + resources from this module (compiled against MC 26.3)
+//  - plus the compat261 classes, compiled against MC 26.1.2 in :fabric-26.1.2
+// MC 26.x ships unobfuscated, so production and development share the Mojang
+// mapping namespace and no remapping step is needed. Version-specific mixins and
+// adapters are selected at runtime by ShakeeMixinPlugin.
+tasks.register('unifiedJar', Zip) {
+    group = 'build'
+    description = 'Assembles the single release jar covering Minecraft 26.1.2-26.3.'
+    def remapJarTask = tasks.named('jar')
+    dependsOn remapJarTask
+    def compatRemapJar = findProject(':fabric-26.1.2')?.tasks?.named('jar')
+    if (compatRemapJar != null && compatRemapJar.isPresent()) {
+        mustRunAfter compatRemapJar
+        dependsOn compatRemapJar
+    }
+    archiveBaseName = 'shakee_blocki-26.x'
+    archiveClassifier = ''
+    archiveExtension = 'jar'
+    archiveVersion = "${modVersion}".toString()
+    destinationDirectory = layout.buildDirectory.dir('libs')
+    from { zipTree(remapJarTask.get().archiveFile.get().asFile) }
+    if (compatRemapJar != null) {
+        from { zipTree(compatRemapJar.get().archiveFile.get().asFile) } {
+            // Only the Minecraft 26.1.x-specific classes; duplicates (shared classes,
+            // fabric.mod.json, mixins.json) are resolved in favor of the 26.3 base.
+            include 'com/shakeeblocki/compat261/**'
+            include 'com/shakeeblocki/mixin/WorldRendererOutlineMixin261.class'
+        }
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
 processResources {
     inputs.property "version", modVersion
 
@@ -49,6 +86,8 @@ sourceSets {
     main {
         java {
             srcDir "../common/src/main/java"
+            // Shared render pipeline for the 26.1.2-26.3 unified jar.
+            srcDir "../common26/src/main/java"
         }
         resources {
             srcDir "../common/src/main/resources"
